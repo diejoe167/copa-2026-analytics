@@ -17,8 +17,17 @@ para a Copa do Mundo de 2026 — a primeira com 48 seleções.
 ## Modelo preditivo (resumo)
 
 - **Gols esperados (λ):** `ataque_A × (defesa_B / defesa_média) × fator_forma` (forma recente escala ±15%).
-- **Resultado:** matriz de Poisson independente 0–7 gols, agregada em vitória/empate/derrota.
+- **Resultado:** matriz de Poisson com correção Dixon-Coles (ρ ajustável), agregada em vitória/empate/derrota; placar exibido é condicionado ao desfecho apontado.
 - **Power Ranking:** softmax calibrado sobre `60% rating + 25% forma recente + 15% pedigree histórico em Copas`.
+
+### Fatores contextuais por jogo
+
+- **🏔️ Altitude:** sedes acima de 1.400m (Cidade do México, Guadalajara) penalizam em 6% o ataque de seleções não adaptadas (todas exceto México, Equador e Colômbia);
+- **🥵 Calor:** sedes quentes sem teto/ar-condicionado penalizam seleções UEFA em 4% (Houston/Dallas/Atlanta têm teto — sem penalidade);
+- **😴 Descanso:** ±2% por dia de diferença de descanso entre as equipes (máx. ±6%);
+- **💤 Jogo morto:** na 3ª rodada, time já garantido (6 pts) joga com ataque x0.85 e concede x1.10 — tanto nos palpites quanto dentro do Monte Carlo;
+- **🟨 Radar de cartões:** critério FIFA (2 amarelos = suspensão; zerados após as quartas). Suspensões cortam o ataque em até 20%, ponderado pela importância do jogador — editável direto no app;
+- **🏟️ Anfitrião e ⭐ craque:** bônus ajustáveis na sidebar.
 
 ## Como executar
 

@@ -11,6 +11,7 @@ Execução:
 Stack: streamlit, pandas, numpy, plotly
 """
 
+import functools
 import math
 from datetime import date
 
@@ -298,6 +299,38 @@ def carregar_head_to_head() -> pd.DataFrame:
     )
 
 
+# Sedes da Copa 2026 e seus fatores físicos: altitude (m), calor extremo em
+# jun/jul e teto/ar-condicionado (anula o calor). Fontes: dados geográficos
+# públicos + características dos estádios.
+SEDES = {
+    "Cidade do México": {"altitude": 2240, "calor": False, "teto": False},
+    "Guadalajara":      {"altitude": 1566, "calor": True,  "teto": False},
+    "Monterrey":        {"altitude": 540,  "calor": True,  "teto": False},
+    "Houston":          {"altitude": 0,    "calor": True,  "teto": True},
+    "Dallas":           {"altitude": 150,  "calor": True,  "teto": True},
+    "Atlanta":          {"altitude": 300,  "calor": True,  "teto": True},
+    "Miami":            {"altitude": 0,    "calor": True,  "teto": False},
+    "Kansas City":      {"altitude": 270,  "calor": True,  "teto": False},
+    "Los Angeles":      {"altitude": 30,   "calor": False, "teto": True},
+    "Nova York/NJ":     {"altitude": 0,    "calor": False, "teto": False},
+    "Filadélfia":       {"altitude": 0,    "calor": False, "teto": False},
+    "Boston":           {"altitude": 0,    "calor": False, "teto": False},
+    "São Francisco":    {"altitude": 0,    "calor": False, "teto": False},
+    "Seattle":          {"altitude": 0,    "calor": False, "teto": True},
+    "Toronto":          {"altitude": 76,   "calor": False, "teto": False},
+    "Vancouver":        {"altitude": 0,    "calor": False, "teto": True},
+}
+
+# Seleções adaptadas à altitude (jogam eliminatórias acima de 1.500m)
+ALTITUDE_ADAPTADOS = {"México", "Equador", "Colômbia"}
+
+# Seleções UEFA — mais sensíveis ao calor úmido americano de junho/julho
+SELECOES_UEFA = {"Alemanha", "Espanha", "França", "Inglaterra", "Portugal",
+                 "Países Baixos", "Croácia", "Bélgica", "Suíça", "Áustria",
+                 "Escócia", "Noruega", "Suécia", "Rep. Checa",
+                 "Bósnia e Herzegovina", "Turquia"}
+
+
 @st.cache_data
 def carregar_calendario() -> pd.DataFrame:
     """Calendário REAL da fase de grupos da Copa 2026 (72 jogos, 11–27/jun).
@@ -305,85 +338,138 @@ def carregar_calendario() -> pd.DataFrame:
     1ª rodada conforme a tabela oficial; 2ª e 3ª seguem o padrão de
     cruzamento da FIFA (validado contra os jogos divulgados dos grupos A–F).
     `resultado` registra placares de jogos já disputados (formato "2x0").
+    `sede` preenchida quando confirmada nas fontes; None = neutra no modelo.
     """
     jogos = [
-        # (data, rodada, grupo, time_a, time_b, resultado)
-        ("11/06", 1, "A", "México", "África do Sul", "2x0"),
-        ("11/06", 1, "A", "Coreia do Sul", "Rep. Checa", "2x1"),
-        ("12/06", 1, "B", "Canadá", "Bósnia e Herzegovina", None),
-        ("12/06", 1, "D", "Estados Unidos", "Paraguai", None),
-        ("13/06", 1, "B", "Catar", "Suíça", None),
-        ("13/06", 1, "C", "Brasil", "Marrocos", None),
-        ("13/06", 1, "C", "Haiti", "Escócia", None),
-        ("14/06", 1, "D", "Austrália", "Turquia", None),
-        ("14/06", 1, "E", "Alemanha", "Curaçao", None),
-        ("14/06", 1, "E", "Costa do Marfim", "Equador", None),
-        ("14/06", 1, "F", "Países Baixos", "Japão", None),
-        ("14/06", 1, "F", "Suécia", "Tunísia", None),
-        ("15/06", 1, "G", "Bélgica", "Egito", None),
-        ("15/06", 1, "G", "Irã", "Nova Zelândia", None),
-        ("15/06", 1, "H", "Espanha", "Cabo Verde", None),
-        ("15/06", 1, "H", "Arábia Saudita", "Uruguai", None),
-        ("16/06", 1, "I", "França", "Senegal", None),
-        ("16/06", 1, "I", "Iraque", "Noruega", None),
-        ("16/06", 1, "J", "Argentina", "Argélia", None),
-        ("17/06", 1, "J", "Áustria", "Jordânia", None),
-        ("17/06", 1, "K", "Portugal", "RD Congo", None),
-        ("17/06", 1, "K", "Uzbequistão", "Colômbia", None),
-        ("17/06", 1, "L", "Inglaterra", "Croácia", None),
-        ("17/06", 1, "L", "Gana", "Panamá", None),
-        ("18/06", 2, "A", "México", "Coreia do Sul", None),
-        ("18/06", 2, "A", "Rep. Checa", "África do Sul", None),
-        ("18/06", 2, "B", "Canadá", "Catar", None),
-        ("18/06", 2, "B", "Suíça", "Bósnia e Herzegovina", None),
-        ("19/06", 2, "C", "Brasil", "Haiti", None),
-        ("19/06", 2, "C", "Escócia", "Marrocos", None),
-        ("19/06", 2, "D", "Estados Unidos", "Austrália", None),
-        ("20/06", 2, "D", "Turquia", "Paraguai", None),
-        ("20/06", 2, "E", "Alemanha", "Costa do Marfim", None),
-        ("20/06", 2, "E", "Equador", "Curaçao", None),
-        ("20/06", 2, "F", "Países Baixos", "Suécia", None),
-        ("21/06", 2, "F", "Tunísia", "Japão", None),
-        ("21/06", 2, "G", "Bélgica", "Irã", None),
-        ("21/06", 2, "G", "Nova Zelândia", "Egito", None),
-        ("21/06", 2, "H", "Espanha", "Arábia Saudita", None),
-        ("21/06", 2, "H", "Uruguai", "Cabo Verde", None),
-        ("22/06", 2, "I", "França", "Iraque", None),
-        ("22/06", 2, "I", "Noruega", "Senegal", None),
-        ("22/06", 2, "J", "Argentina", "Áustria", None),
-        ("22/06", 2, "J", "Jordânia", "Argélia", None),
-        ("23/06", 2, "K", "Portugal", "Uzbequistão", None),
-        ("23/06", 2, "K", "Colômbia", "RD Congo", None),
-        ("23/06", 2, "L", "Inglaterra", "Gana", None),
-        ("23/06", 2, "L", "Panamá", "Croácia", None),
-        ("24/06", 3, "A", "Rep. Checa", "México", None),
-        ("24/06", 3, "A", "África do Sul", "Coreia do Sul", None),
-        ("24/06", 3, "B", "Suíça", "Canadá", None),
-        ("24/06", 3, "B", "Bósnia e Herzegovina", "Catar", None),
-        ("24/06", 3, "C", "Escócia", "Brasil", None),
-        ("24/06", 3, "C", "Marrocos", "Haiti", None),
-        ("25/06", 3, "D", "Turquia", "Estados Unidos", None),
-        ("25/06", 3, "D", "Paraguai", "Austrália", None),
-        ("25/06", 3, "E", "Equador", "Alemanha", None),
-        ("25/06", 3, "E", "Curaçao", "Costa do Marfim", None),
-        ("25/06", 3, "F", "Tunísia", "Países Baixos", None),
-        ("25/06", 3, "F", "Japão", "Suécia", None),
-        ("26/06", 3, "G", "Nova Zelândia", "Bélgica", None),
-        ("26/06", 3, "G", "Egito", "Irã", None),
-        ("26/06", 3, "I", "Noruega", "França", None),
-        ("26/06", 3, "I", "Senegal", "Iraque", None),
-        ("27/06", 3, "H", "Uruguai", "Espanha", None),
-        ("27/06", 3, "H", "Cabo Verde", "Arábia Saudita", None),
-        ("27/06", 3, "J", "Jordânia", "Argentina", None),
-        ("27/06", 3, "J", "Argélia", "Áustria", None),
-        ("27/06", 3, "K", "Colômbia", "Portugal", None),
-        ("27/06", 3, "K", "RD Congo", "Uzbequistão", None),
-        ("27/06", 3, "L", "Panamá", "Inglaterra", None),
-        ("27/06", 3, "L", "Croácia", "Gana", None),
+        # (data, rodada, grupo, time_a, time_b, resultado, sede)
+        ("11/06", 1, "A", "México", "África do Sul", "2x0", "Cidade do México"),
+        ("11/06", 1, "A", "Coreia do Sul", "Rep. Checa", "2x1", "Guadalajara"),
+        ("12/06", 1, "B", "Canadá", "Bósnia e Herzegovina", None, "Toronto"),
+        ("12/06", 1, "D", "Estados Unidos", "Paraguai", None, "Los Angeles"),
+        ("13/06", 1, "B", "Catar", "Suíça", None, None),
+        ("13/06", 1, "C", "Brasil", "Marrocos", None, "Nova York/NJ"),
+        ("13/06", 1, "C", "Haiti", "Escócia", None, "Boston"),
+        ("14/06", 1, "D", "Austrália", "Turquia", None, None),
+        ("14/06", 1, "E", "Alemanha", "Curaçao", None, "Houston"),
+        ("14/06", 1, "E", "Costa do Marfim", "Equador", None, "Filadélfia"),
+        ("14/06", 1, "F", "Países Baixos", "Japão", None, None),
+        ("14/06", 1, "F", "Suécia", "Tunísia", None, None),
+        ("15/06", 1, "G", "Bélgica", "Egito", None, None),
+        ("15/06", 1, "G", "Irã", "Nova Zelândia", None, "Los Angeles"),
+        ("15/06", 1, "H", "Espanha", "Cabo Verde", None, "Atlanta"),
+        ("15/06", 1, "H", "Arábia Saudita", "Uruguai", None, None),
+        ("16/06", 1, "I", "França", "Senegal", None, "Nova York/NJ"),
+        ("16/06", 1, "I", "Iraque", "Noruega", None, None),
+        ("16/06", 1, "J", "Argentina", "Argélia", None, None),
+        ("17/06", 1, "J", "Áustria", "Jordânia", None, None),
+        ("17/06", 1, "K", "Portugal", "RD Congo", None, "Houston"),
+        ("17/06", 1, "K", "Uzbequistão", "Colômbia", None, None),
+        ("17/06", 1, "L", "Inglaterra", "Croácia", None, "Dallas"),
+        ("17/06", 1, "L", "Gana", "Panamá", None, "Toronto"),
+        ("18/06", 2, "A", "México", "Coreia do Sul", None, "Guadalajara"),
+        ("18/06", 2, "A", "Rep. Checa", "África do Sul", None, "Atlanta"),
+        ("18/06", 2, "B", "Canadá", "Catar", None, None),
+        ("18/06", 2, "B", "Suíça", "Bósnia e Herzegovina", None, "Los Angeles"),
+        ("19/06", 2, "C", "Brasil", "Haiti", None, "Filadélfia"),
+        ("19/06", 2, "C", "Escócia", "Marrocos", None, "Boston"),
+        ("19/06", 2, "D", "Estados Unidos", "Austrália", None, "Seattle"),
+        ("20/06", 2, "D", "Turquia", "Paraguai", None, None),
+        ("20/06", 2, "E", "Alemanha", "Costa do Marfim", None, "Toronto"),
+        ("20/06", 2, "E", "Equador", "Curaçao", None, None),
+        ("20/06", 2, "F", "Países Baixos", "Suécia", None, "Houston"),
+        ("21/06", 2, "F", "Tunísia", "Japão", None, None),
+        ("21/06", 2, "G", "Bélgica", "Irã", None, "Los Angeles"),
+        ("21/06", 2, "G", "Nova Zelândia", "Egito", None, None),
+        ("21/06", 2, "H", "Espanha", "Arábia Saudita", None, None),
+        ("21/06", 2, "H", "Uruguai", "Cabo Verde", None, None),
+        ("22/06", 2, "I", "França", "Iraque", None, "Toronto"),
+        ("22/06", 2, "I", "Noruega", "Senegal", None, "Nova York/NJ"),
+        ("22/06", 2, "J", "Argentina", "Áustria", None, None),
+        ("22/06", 2, "J", "Jordânia", "Argélia", None, None),
+        ("23/06", 2, "K", "Portugal", "Uzbequistão", None, None),
+        ("23/06", 2, "K", "Colômbia", "RD Congo", None, None),
+        ("23/06", 2, "L", "Inglaterra", "Gana", None, None),
+        ("23/06", 2, "L", "Panamá", "Croácia", None, None),
+        ("24/06", 3, "A", "Rep. Checa", "México", None, "Cidade do México"),
+        ("24/06", 3, "A", "África do Sul", "Coreia do Sul", None, None),
+        ("24/06", 3, "B", "Suíça", "Canadá", None, None),
+        ("24/06", 3, "B", "Bósnia e Herzegovina", "Catar", None, None),
+        ("24/06", 3, "C", "Escócia", "Brasil", None, None),
+        ("24/06", 3, "C", "Marrocos", "Haiti", None, "Atlanta"),
+        ("25/06", 3, "D", "Turquia", "Estados Unidos", None, None),
+        ("25/06", 3, "D", "Paraguai", "Austrália", None, None),
+        ("25/06", 3, "E", "Equador", "Alemanha", None, "Nova York/NJ"),
+        ("25/06", 3, "E", "Curaçao", "Costa do Marfim", None, None),
+        ("25/06", 3, "F", "Tunísia", "Países Baixos", None, None),
+        ("25/06", 3, "F", "Japão", "Suécia", None, None),
+        ("26/06", 3, "G", "Nova Zelândia", "Bélgica", None, None),
+        ("26/06", 3, "G", "Egito", "Irã", None, None),
+        ("26/06", 3, "I", "Noruega", "França", None, None),
+        ("26/06", 3, "I", "Senegal", "Iraque", None, None),
+        ("27/06", 3, "H", "Uruguai", "Espanha", None, None),
+        ("27/06", 3, "H", "Cabo Verde", "Arábia Saudita", None, None),
+        ("27/06", 3, "J", "Jordânia", "Argentina", None, None),
+        ("27/06", 3, "J", "Argélia", "Áustria", None, None),
+        ("27/06", 3, "K", "Colômbia", "Portugal", None, "Atlanta"),
+        ("27/06", 3, "K", "RD Congo", "Uzbequistão", None, None),
+        ("27/06", 3, "L", "Panamá", "Inglaterra", None, "Nova York/NJ"),
+        ("27/06", 3, "L", "Croácia", "Gana", None, None),
     ]
     return pd.DataFrame(
-        jogos, columns=["data", "rodada", "grupo", "time_a", "time_b", "resultado"]
+        jogos,
+        columns=["data", "rodada", "grupo", "time_a", "time_b", "resultado", "sede"],
     )
+
+
+@st.cache_data
+def carregar_cartoes() -> pd.DataFrame:
+    """Controle de cartões dos jogadores-chave (critério FIFA).
+
+    2 amarelos em jogos diferentes = suspensão na partida seguinte
+    (pendurados zerados após as quartas). Vermelho = fora do próximo jogo.
+    `importancia` (0–1) pondera o peso do desfalque no ataque da seleção.
+    Atualize `amarelos`/`vermelho` conforme o torneio — ou edite direto
+    no Radar de Cartões do app.
+    """
+    dados = [
+        # (jogador, seleção, posição, importância, amarelos, vermelho)
+        ("Kylian Mbappé",     "França",         "ATA", 0.95, 0, False),
+        ("Aurélien Tchouaméni","França",        "VOL", 0.75, 0, False),
+        ("Dayot Upamecano",   "França",         "ZAG", 0.65, 0, False),
+        ("Lionel Messi",      "Argentina",      "ATA", 0.90, 0, False),
+        ("Cristian Romero",   "Argentina",      "ZAG", 0.75, 0, False),
+        ("Rodrigo De Paul",   "Argentina",      "MEI", 0.70, 0, False),
+        ("Vinícius Júnior",   "Brasil",         "ATA", 0.85, 0, False),
+        ("Raphinha",          "Brasil",         "ATA", 0.80, 0, False),
+        ("Casemiro",          "Brasil",         "VOL", 0.65, 0, False),
+        ("Marquinhos",        "Brasil",         "ZAG", 0.70, 0, False),
+        ("Lamine Yamal",      "Espanha",        "ATA", 0.90, 0, False),
+        ("Rodri",             "Espanha",        "VOL", 0.85, 0, False),
+        ("Jude Bellingham",   "Inglaterra",     "MEI", 0.85, 0, False),
+        ("Declan Rice",       "Inglaterra",     "VOL", 0.75, 0, False),
+        ("Harry Kane",        "Inglaterra",     "ATA", 0.85, 0, False),
+        ("Jamal Musiala",     "Alemanha",       "MEI", 0.80, 0, False),
+        ("Antonio Rüdiger",   "Alemanha",       "ZAG", 0.70, 0, False),
+        ("Joshua Kimmich",    "Alemanha",       "LAT", 0.75, 0, False),
+        ("Bruno Fernandes",   "Portugal",       "MEI", 0.80, 0, False),
+        ("Vitinha",           "Portugal",       "MEI", 0.70, 0, False),
+        ("Cody Gakpo",        "Países Baixos",  "ATA", 0.75, 0, False),
+        ("Ryan Gravenberch",  "Países Baixos",  "VOL", 0.70, 0, False),
+        ("Achraf Hakimi",     "Marrocos",       "LAT", 0.85, 0, False),
+        ("Sofyan Amrabat",    "Marrocos",       "VOL", 0.70, 0, False),
+        ("Erling Haaland",    "Noruega",        "ATA", 0.95, 0, False),
+        ("Martin Ødegaard",   "Noruega",        "MEI", 0.75, 0, False),
+        ("Federico Valverde", "Uruguai",        "MEI", 0.85, 0, False),
+        ("Luis Díaz",         "Colômbia",       "ATA", 0.85, 0, False),
+        ("Kaoru Mitoma",      "Japão",          "ATA", 0.75, 0, False),
+        ("Christian Pulisic", "Estados Unidos", "ATA", 0.85, 0, False),
+        ("Luka Modrić",       "Croácia",        "MEI", 0.70, 0, False),
+        ("Santiago Giménez",  "México",         "ATA", 0.75, 0, False),
+        ("Edson Álvarez",     "México",         "VOL", 0.70, 0, False),
+    ]
+    return pd.DataFrame(dados, columns=[
+        "jogador", "selecao", "posicao", "importancia", "amarelos", "vermelho",
+    ])
 
 
 def _parse_placar(placar: str) -> tuple[int, int]:
@@ -456,6 +542,126 @@ def aplicar_resultados(forcas: pd.DataFrame, calendario: pd.DataFrame) -> tuple:
 
 
 ANFITRIOES = {"Estados Unidos", "México", "Canadá"}
+
+
+# ----------------------------------------------------------------------------
+# FATORES CONTEXTUAIS POR JOGO — clima/altitude, descanso, jogo morto, cartões
+# ----------------------------------------------------------------------------
+
+def fator_clima(time: str, sede: str | None) -> tuple[float, list]:
+    """Penalidade de altitude/calor para um time numa sede específica."""
+    if not sede or sede not in SEDES:
+        return 1.0, []
+    info, mult, flags = SEDES[sede], 1.0, []
+    if info["altitude"] >= 1400 and time not in ALTITUDE_ADAPTADOS:
+        mult *= 0.94
+        flags.append(f"🏔️ {time} na altitude ({info['altitude']}m)")
+    if info["calor"] and not info["teto"] and time in SELECOES_UEFA:
+        mult *= 0.96
+        flags.append(f"🥵 {time} no calor a céu aberto")
+    return mult, flags
+
+
+def _dia_de_junho(data: str) -> int:
+    """Converte "dd/mm" em dia corrido (fase de grupos é toda em junho)."""
+    dia, _ = data.split("/")
+    return int(dia)
+
+
+def dias_descanso(calendario: pd.DataFrame, time: str, data: str) -> int | None:
+    """Dias desde o último jogo do time antes de `data` (None = estreia)."""
+    dia_atual = _dia_de_junho(data)
+    anteriores = [
+        _dia_de_junho(j["data"])
+        for _, j in calendario.iterrows()
+        if time in (j["time_a"], j["time_b"]) and _dia_de_junho(j["data"]) < dia_atual
+    ]
+    return dia_atual - max(anteriores) if anteriores else None
+
+
+def pontos_reais_grupo(calendario: pd.DataFrame, grupo: str) -> dict:
+    """Pontos já conquistados (resultados reais) por time num grupo."""
+    pontos: dict = {}
+    jogos = calendario[(calendario["grupo"] == grupo)
+                       & calendario["resultado"].notna()]
+    for _, j in jogos.iterrows():
+        ga, gb = _parse_placar(j["resultado"])
+        pontos.setdefault(j["time_a"], 0)
+        pontos.setdefault(j["time_b"], 0)
+        if ga > gb:
+            pontos[j["time_a"]] += 3
+        elif gb > ga:
+            pontos[j["time_b"]] += 3
+        else:
+            pontos[j["time_a"]] += 1
+            pontos[j["time_b"]] += 1
+    return pontos
+
+
+def desfalques_por_selecao(cartoes: pd.DataFrame) -> dict:
+    """Resumo dos cartões: multiplicador de ataque e listas por seleção.
+
+    Suspenso = 2+ amarelos ou vermelho. Cada suspenso corta o ataque
+    proporcionalmente à sua importância (até -20% no total).
+    """
+    resumo = {}
+    for selecao, grupo_df in cartoes.groupby("selecao"):
+        suspensos = grupo_df[(grupo_df["amarelos"] >= 2) | grupo_df["vermelho"]]
+        pendurados = grupo_df[(grupo_df["amarelos"] == 1) & ~grupo_df["vermelho"]]
+        mult = max(0.80, 1 - 0.08 * suspensos["importancia"].sum())
+        resumo[selecao] = {
+            "mult": mult,
+            "suspensos": suspensos["jogador"].tolist(),
+            "pendurados": pendurados["jogador"].tolist(),
+            "risco": float((pendurados["importancia"]).sum().round(2)),
+        }
+    return resumo
+
+
+def fatores_contextuais(jogo: pd.Series, calendario: pd.DataFrame,
+                        desfalques: dict) -> tuple[float, float, list]:
+    """Multiplicadores de gols esperados (time_a, time_b) + flags explicativas."""
+    a, b = jogo["time_a"], jogo["time_b"]
+    flags: list = []
+
+    mult_a, flags_a = fator_clima(a, jogo["sede"])
+    mult_b, flags_b = fator_clima(b, jogo["sede"])
+    flags += flags_a + flags_b
+
+    # Descanso: ±2% por dia de diferença (máx. ±6%)
+    desc_a = dias_descanso(calendario, a, jogo["data"])
+    desc_b = dias_descanso(calendario, b, jogo["data"])
+    if desc_a is not None and desc_b is not None and desc_a != desc_b:
+        diff = max(-3, min(3, desc_a - desc_b))
+        mult_a *= 1 + 0.02 * diff
+        mult_b *= 1 - 0.02 * diff
+        beneficiado = a if diff > 0 else b
+        flags.append(f"😴 {beneficiado} com +{abs(diff)}d de descanso")
+
+    # Jogo morto: 3ª rodada com um lado já garantido (6 pts) joga em ritmo menor
+    if jogo["rodada"] == 3:
+        pontos = pontos_reais_grupo(calendario, jogo["grupo"])
+        for time, proprio, outro in ((a, "a", "b"), (b, "b", "a")):
+            if pontos.get(time, 0) >= 6:
+                if proprio == "a":
+                    mult_a *= 0.85
+                    mult_b *= 1.10
+                else:
+                    mult_b *= 0.85
+                    mult_a *= 1.10
+                flags.append(f"💤 {time} já classificado (jogo morto)")
+
+    # Desfalques por suspensão
+    for time, attr in ((a, "mult_a"), (b, "mult_b")):
+        info = desfalques.get(time)
+        if info and info["suspensos"]:
+            if attr == "mult_a":
+                mult_a *= info["mult"]
+            else:
+                mult_b *= info["mult"]
+            flags.append(f"🟥 {time} sem {', '.join(info['suspensos'])}")
+
+    return mult_a, mult_b, flags
 
 
 @st.cache_data
@@ -654,13 +860,26 @@ def _precomputar_lambdas(forcas: pd.DataFrame) -> dict:
     return lams
 
 
+@functools.lru_cache(maxsize=None)
+def _clima_mult(time: str, sede: str | None) -> float:
+    """Multiplicador de clima/altitude memoizado (uso intensivo no Monte Carlo)."""
+    return fator_clima(time, sede)[0]
+
+
 def _simular_grupo(rng: np.random.Generator, lams: dict, times: list,
-                   fixos: dict | None = None) -> tuple:
-    """Round-robin de 4 times; jogos já disputados usam o placar real."""
+                   fixos: dict | None = None,
+                   fixtures: list | None = None) -> tuple:
+    """Grupo simulado rodada a rodada com os confrontos e sedes REAIS.
+
+    Jogos já disputados usam o placar real. Clima/altitude penalizam os λ
+    por sede, e na 3ª rodada um time com 6 pontos relaxa (efeito jogo morto:
+    ataque x0.85, adversário x1.10). Sem `fixtures`, cai no round-robin puro.
+    """
     stats = {t: {"P": 0, "J": 0, "V": 0, "E": 0, "D": 0, "GP": 0, "GC": 0} for t in times}
-    for i in range(4):
-        for j in range(i + 1, 4):
-            a, b = times[i], times[j]
+    if fixtures is None:
+        fixtures = [(1, times[i], times[j], None)
+                    for i in range(4) for j in range(i + 1, 4)]
+    for rodada, a, b, sede in sorted(fixtures, key=lambda f: f[0]):
             real = None
             if fixos:
                 real = fixos.get((a, b))
@@ -670,8 +889,15 @@ def _simular_grupo(rng: np.random.Generator, lams: dict, times: list,
             if real is not None:
                 ga, gb = real
             else:
-                ga = int(rng.poisson(lams[(a, b)]))
-                gb = int(rng.poisson(lams[(b, a)]))
+                la = lams[(a, b)] * _clima_mult(a, sede)
+                lb = lams[(b, a)] * _clima_mult(b, sede)
+                if rodada == 3:
+                    if stats[a]["P"] >= 6:
+                        la, lb = la * 0.85, lb * 1.10
+                    if stats[b]["P"] >= 6:
+                        lb, la = lb * 0.85, la * 1.10
+                ga = int(rng.poisson(la))
+                gb = int(rng.poisson(lb))
             stats[a]["J"] += 1; stats[b]["J"] += 1
             stats[a]["GP"] += ga; stats[a]["GC"] += gb
             stats[b]["GP"] += gb; stats[b]["GC"] += ga
@@ -732,12 +958,24 @@ def _jogo_mata_mata(rng: np.random.Generator, lams: dict, a: str, b: str) -> tup
     return ga, gb, vencedor, penaltis
 
 
+def montar_fixtures(calendario: pd.DataFrame) -> dict:
+    """Confrontos reais por grupo: {grupo: [(rodada, time_a, time_b, sede), ...]}."""
+    fixtures: dict = {}
+    for _, j in calendario.iterrows():
+        sede = j["sede"] if pd.notna(j["sede"]) else None
+        fixtures.setdefault(j["grupo"], []).append(
+            (int(j["rodada"]), j["time_a"], j["time_b"], sede))
+    return fixtures
+
+
 def simular_copa(rng: np.random.Generator, lams: dict, grupos: dict,
-                 detalhado: bool = False, fixos: dict | None = None) -> dict:
+                 detalhado: bool = False, fixos: dict | None = None,
+                 fixtures: dict | None = None) -> dict:
     """Simula a Copa 2026 completa (72 jogos de grupos + 31 de mata-mata).
 
     Jogos presentes em `fixos` (já disputados) entram com o placar real;
-    o restante é sorteado via Poisson. Retorna níveis de avanço por seleção
+    o restante é sorteado via Poisson, com clima/altitude por sede e efeito
+    jogo morto na 3ª rodada (via `fixtures` reais). Retorna níveis de avanço
     e, se `detalhado`, as tabelas de grupo e os placares do mata-mata.
     """
     niveis = {t: 0 for ts in grupos.values() for t in ts}
@@ -745,7 +983,8 @@ def simular_copa(rng: np.random.Generator, lams: dict, grupos: dict,
 
     primeiro, segundo, terceiros = {}, {}, []
     for g in sorted(grupos):
-        ordem, stats = _simular_grupo(rng, lams, grupos[g], fixos)
+        ordem, stats = _simular_grupo(rng, lams, grupos[g], fixos,
+                                      fixtures.get(g) if fixtures else None)
         primeiro[g], segundo[g] = ordem[0], ordem[1]
         terceiros.append((g, ordem[2], stats[ordem[2]]))
         if detalhado:
@@ -808,13 +1047,14 @@ def rodar_monte_carlo(n_sims: int, seed: int, forcas: pd.DataFrame,
     lams = _precomputar_lambdas(forcas)
     grupos = forcas.groupby("grupo")["selecao"].apply(list).to_dict()
     fixos = extrair_resultados_fixos(calendario) if calendario is not None else None
+    fixtures = montar_fixtures(calendario) if calendario is not None else None
 
     times = forcas["selecao"].tolist()
     contagem_nivel = {t: np.zeros(7, dtype=int) for t in times}
     finais, campeoes = {}, {}
 
     for _ in range(n_sims):
-        r = simular_copa(rng, lams, grupos, fixos=fixos)
+        r = simular_copa(rng, lams, grupos, fixos=fixos, fixtures=fixtures)
         for t, nv in r["niveis"].items():
             contagem_nivel[t][nv] += 1
         par_final = tuple(sorted((r["campeao"], r["vice"])))
@@ -1041,9 +1281,15 @@ def render_tab_atletas(jogadores: pd.DataFrame, filtros: dict) -> None:
 
 
 def prever_jogo(forcas: pd.DataFrame, time_a: str, time_b: str,
-                rho: float = 0.0) -> dict:
-    """Previsão compacta: probabilidades + placar típico DO desfecho apontado."""
+                rho: float = 0.0, mult_a: float = 1.0,
+                mult_b: float = 1.0) -> dict:
+    """Previsão compacta: probabilidades + placar típico DO desfecho apontado.
+
+    `mult_a`/`mult_b` aplicam fatores contextuais (clima, descanso,
+    jogo morto, desfalques) sobre os gols esperados.
+    """
     lambda_a, lambda_b = gols_esperados(forcas, time_a, time_b)
+    lambda_a, lambda_b = lambda_a * mult_a, lambda_b * mult_b
     matriz = matriz_poisson(lambda_a, lambda_b, rho)
     probs = probabilidades_resultado(matriz)
     if probs["vitoria_a"] >= max(probs["empate"], probs["vitoria_b"]):
@@ -1058,8 +1304,57 @@ def prever_jogo(forcas: pd.DataFrame, time_a: str, time_b: str,
             "p_placar": p_placar * 100, "palpite": palpite}
 
 
+def render_radar_cartoes(cartoes_base: pd.DataFrame) -> pd.DataFrame:
+    """Radar de cartões editável; retorna o estado atual para alimentar palpites."""
+    with st.expander("🟨 Radar de cartões e desfalques (editável)"):
+        st.markdown(
+            "Critério FIFA: **2 amarelos = suspensão no jogo seguinte** (zerados "
+            "após as quartas); vermelho = fora da próxima partida. Edite os "
+            "cartões conforme o torneio — suspensões cortam o ataque da seleção "
+            "nos palpites (até -20%, ponderado pela importância do jogador)."
+        )
+        cartoes = st.data_editor(
+            cartoes_base, key="radar_cartoes", hide_index=True,
+            use_container_width=True, height=320,
+            column_config={
+                "jogador": st.column_config.TextColumn("Jogador", disabled=True),
+                "selecao": st.column_config.TextColumn("Seleção", disabled=True),
+                "posicao": st.column_config.TextColumn("Pos.", disabled=True),
+                "importancia": st.column_config.NumberColumn(
+                    "Importância", min_value=0.0, max_value=1.0, format="%.2f"),
+                "amarelos": st.column_config.NumberColumn(
+                    "🟨 Amarelos", min_value=0, max_value=2, step=1),
+                "vermelho": st.column_config.CheckboxColumn("🟥 Vermelho"),
+            },
+        )
+        resumo = desfalques_por_selecao(cartoes)
+        suspensos = [(t, i) for t, i in resumo.items() if i["suspensos"]]
+        pendurados = sorted(
+            ((t, i) for t, i in resumo.items() if i["pendurados"]),
+            key=lambda x: x[1]["risco"], reverse=True)
+        col_s, col_p = st.columns(2)
+        with col_s:
+            st.markdown("**🟥 Suspensos no próximo jogo:**")
+            if suspensos:
+                for t, i in suspensos:
+                    st.markdown(f"- **{t}**: {', '.join(i['suspensos'])} "
+                                f"(ataque x{i['mult']:.2f})")
+            else:
+                st.markdown("- Nenhum até agora.")
+        with col_p:
+            st.markdown("**⚠️ Pendurados (próximo amarelo suspende):**")
+            if pendurados:
+                for t, i in pendurados[:6]:
+                    st.markdown(f"- **{t}**: {', '.join(i['pendurados'])} "
+                                f"— risco {i['risco']:.2f}")
+            else:
+                st.markdown("- Nenhum até agora.")
+    return cartoes
+
+
 def render_palpites_calendario(forcas: pd.DataFrame, calendario: pd.DataFrame,
-                               rho: float = 0.0) -> None:
+                               rho: float = 0.0,
+                               cartoes: pd.DataFrame | None = None) -> None:
     """Palpites do modelo para os jogos reais da fase de grupos, por data."""
     st.markdown("#### 📅 Palpites do calendário real (fase de grupos)")
 
@@ -1076,9 +1371,12 @@ def render_palpites_calendario(forcas: pd.DataFrame, calendario: pd.DataFrame,
         unsafe_allow_html=True,
     )
 
+    desfalques = desfalques_por_selecao(cartoes) if cartoes is not None else {}
     linhas = []
     for _, jogo in jogos_dia.iterrows():
-        prev = prever_jogo(forcas, jogo["time_a"], jogo["time_b"], rho)
+        mult_a, mult_b, flags = fatores_contextuais(jogo, calendario, desfalques)
+        prev = prever_jogo(forcas, jogo["time_a"], jogo["time_b"], rho,
+                           mult_a, mult_b)
         resultado_str = "—"
         if pd.notna(jogo["resultado"]):
             ga, gb = _parse_placar(jogo["resultado"])
@@ -1089,11 +1387,13 @@ def render_palpites_calendario(forcas: pd.DataFrame, calendario: pd.DataFrame,
         linhas.append({
             "Grupo": jogo["grupo"],
             "Jogo": f"{jogo['time_a']} x {jogo['time_b']}",
+            "Sede": jogo["sede"] if pd.notna(jogo["sede"]) else "—",
             f"Vit. mandante (%)": round(prev["vitoria_a"], 1),
             "Empate (%)": round(prev["empate"], 1),
             f"Vit. visitante (%)": round(prev["vitoria_b"], 1),
             "Placar típico do palpite": f"{prev['placar']} ({prev['p_placar']:.0f}%)",
             "Palpite do modelo": prev["palpite"],
+            "Contexto": " · ".join(flags) if flags else "—",
             "Resultado real": resultado_str,
         })
     df_palpites = pd.DataFrame(linhas)
@@ -1162,7 +1462,8 @@ def render_tab_simulador(forcas: pd.DataFrame, historico: pd.DataFrame,
         "e impacto do craque da seleção."
     )
 
-    render_palpites_calendario(forcas, calendario, rho)
+    cartoes = render_radar_cartoes(carregar_cartoes())
+    render_palpites_calendario(forcas, calendario, rho, cartoes)
     render_recalibragem(ajustes)
     render_fatores_extras(fatores)
     st.divider()
@@ -1289,7 +1590,9 @@ def render_tab_torneio(forcas: pd.DataFrame, calendario: pd.DataFrame) -> None:
         "grupos + 31 de mata-mata com o modelo de Poisson; os 8 melhores terceiros "
         "são alocados aos slots oficiais por busca exata. "
         f"**{n_jogados} jogo(s) já disputado(s) entram com o placar real** — as "
-        "probabilidades refletem o torneio daqui em diante."
+        "probabilidades refletem o torneio daqui em diante. A fase de grupos é "
+        "simulada rodada a rodada com sedes reais: altitude/calor penalizam os "
+        "gols esperados e times já classificados relaxam na 3ª rodada (jogo morto)."
     )
 
     grupos = forcas.groupby("grupo")["selecao"].apply(list).to_dict()
@@ -1361,7 +1664,8 @@ def render_tab_torneio(forcas: pd.DataFrame, calendario: pd.DataFrame) -> None:
         rng = np.random.default_rng(int(seed) * 7 + 1)
         lams = _precomputar_lambdas(forcas)
         copa = simular_copa(rng, lams, grupos, detalhado=True,
-                            fixos=extrair_resultados_fixos(calendario))
+                            fixos=extrair_resultados_fixos(calendario),
+                            fixtures=montar_fixtures(calendario))
 
         st.success(
             f"🏆 **Campeão: {copa['campeao']}** — venceu {copa['vice']} na decisão."
