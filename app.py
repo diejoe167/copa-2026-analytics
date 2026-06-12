@@ -1453,12 +1453,18 @@ def prever_jogo(forcas: pd.DataFrame, time_a: str, time_b: str,
     """
     matriz, _, _ = matriz_confronto(forcas, time_a, time_b, rho, mult_a, mult_b)
     probs = probabilidades_resultado(matriz)
-    if probs["vitoria_a"] >= max(probs["empate"], probs["vitoria_b"]):
-        chave, palpite = "vitoria_a", f"Vitória {time_a}"
-    elif probs["vitoria_b"] >= probs["empate"]:
-        chave, palpite = "vitoria_b", f"Vitória {time_b}"
-    else:
+    # O empate raramente é o desfecho individual mais provável (~38/24/38 em
+    # jogos parelhos), mas ~25% dos jogos de grupos terminam empatados.
+    # Regra do analista: jogo equilibrado demais para cravar um lado
+    # (diferença <= 6 p.p.) com empate relevante (>= 23%) → palpite Empate.
+    equilibrado = (abs(probs["vitoria_a"] - probs["vitoria_b"]) <= 0.06
+                   and probs["empate"] >= 0.23)
+    if equilibrado or probs["empate"] >= max(probs["vitoria_a"], probs["vitoria_b"]):
         chave, palpite = "empate", "Empate"
+    elif probs["vitoria_a"] >= probs["vitoria_b"]:
+        chave, palpite = "vitoria_a", f"Vitória {time_a}"
+    else:
+        chave, palpite = "vitoria_b", f"Vitória {time_b}"
     placar, p_placar = placar_condicional(matriz, chave)
     goleadas = prob_goleada(matriz)
     return {"vitoria_a": probs["vitoria_a"] * 100, "empate": probs["empate"] * 100,
