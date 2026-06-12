@@ -20,6 +20,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from dados_copas import carregar_museu, titulos_por_selecao
+
 # ============================================================================
 # CONFIGURAÇÃO GERAL E ESTILO
 # ============================================================================
@@ -1388,6 +1390,78 @@ def render_tab_torneio(forcas: pd.DataFrame, calendario: pd.DataFrame) -> None:
             st.markdown("  \n".join(linhas))
 
 
+def render_tab_museu(museu: pd.DataFrame) -> None:
+    """Tab 5 — Museu das Copas: acervo histórico 1930–2022, isolado do modelo."""
+    st.subheader("🏛️ Museu das Copas — Todas as edições (1930–2022)")
+    st.caption(
+        "Acervo histórico completo, propositalmente **isolado do modelo preditivo**: "
+        "a Copa de 1930 não influencia as probabilidades de 2026. O simulador usa "
+        "apenas forças atuais, pedigree recente (2006–2022) e os resultados reais "
+        "desta Copa."
+    )
+
+    titulos = titulos_por_selecao(museu)
+    recorde_gols = museu.loc[museu["gols_por_jogo"].idxmax()]
+    recorde_artilheiro = museu.loc[museu["gols_artilheiro"].idxmax()]
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("🏆 Edições disputadas", f"{len(museu)}", "1930 → 2022")
+    c2.metric("👑 Maior campeão", titulos.iloc[0]["selecao"],
+              f"{titulos.iloc[0]['titulos']} títulos")
+    c3.metric("⚽ Copa mais goleadora", f"{recorde_gols['edicao']} ({recorde_gols['sede']})",
+              f"{recorde_gols['gols_por_jogo']} gols/jogo")
+    c4.metric("🎯 Recorde de artilharia", recorde_artilheiro["artilheiro"].split(" (")[0],
+              f"{recorde_artilheiro['gols_artilheiro']} gols em {recorde_artilheiro['edicao']}")
+
+    st.divider()
+    col_era, col_titulos = st.columns([3, 2])
+
+    with col_era:
+        fig = px.line(
+            museu, x="edicao", y="gols_por_jogo", markers=True,
+            labels={"edicao": "Edição", "gols_por_jogo": "Gols por jogo"},
+            title="As eras do futebol: média de gols por jogo (1930–2022)",
+        )
+        fig.update_traces(line_color=CORES["primaria"], marker=dict(size=8))
+        fig.add_annotation(x=1954, y=5.38, text="Era romântica<br>(5.38 em 1954)",
+                           showarrow=True, arrowhead=2, ay=-40)
+        fig.add_annotation(x=1990, y=2.21, text="Auge da retranca<br>(2.21 em 1990)",
+                           showarrow=True, arrowhead=2, ay=40)
+        fig.update_layout(height=430)
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col_titulos:
+        fig2 = px.bar(
+            titulos, x="titulos", y="selecao", orientation="h", text="titulos",
+            color="titulos", color_continuous_scale=["#FFF8E1", "#FFC107"],
+            labels={"titulos": "Títulos", "selecao": ""},
+            title="Galeria de campeões",
+        )
+        fig2.update_layout(height=430, coloraxis_showscale=False,
+                           yaxis={"categoryorder": "total ascending"})
+        st.plotly_chart(fig2, use_container_width=True)
+
+    st.markdown("**📜 Todas as finais, edição por edição:**")
+    st.dataframe(
+        museu[["edicao", "sede", "campeao", "placar_final", "vice", "terceiro",
+               "selecoes", "gols", "gols_por_jogo", "artilheiro", "gols_artilheiro"]],
+        use_container_width=True, hide_index=True, height=520,
+        column_config={
+            "edicao": st.column_config.NumberColumn("Ano", format="%d"),
+            "sede": "Sede", "campeao": "🏆 Campeão", "placar_final": "Final",
+            "vice": "Vice", "terceiro": "3º lugar",
+            "selecoes": st.column_config.NumberColumn("Seleções"),
+            "gols": st.column_config.NumberColumn("Gols"),
+            "gols_por_jogo": st.column_config.NumberColumn("Gols/jogo", format="%.2f"),
+            "artilheiro": "Artilheiro", "gols_artilheiro": st.column_config.NumberColumn("⚽"),
+        },
+    )
+    st.caption(
+        "Alemanha inclui os títulos da Alemanha Ocidental (1954, 1974, 1990). "
+        "Em 1950 não houve final única: o 'Maracanazo' decidiu no quadrangular final."
+    )
+
+
 def render_tab_cronica(forcas: pd.DataFrame, historico: pd.DataFrame,
                        jogadores: pd.DataFrame) -> None:
     """Tab 4 — Crônica do Especialista: a narrativa por trás dos números."""
@@ -1494,11 +1568,12 @@ def main() -> None:
             "da fase de grupos."
         )
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📊 Panorama Histórico",
         "🏃‍♂️ Desempenho de Atletas",
         "🔮 Simulador e Previsões",
         "🏆 Simulação do Torneio",
+        "🏛️ Museu das Copas",
         "✍️ Crônica do Especialista",
     ])
     with tab1:
@@ -1511,6 +1586,8 @@ def main() -> None:
     with tab4:
         render_tab_torneio(forcas, calendario)
     with tab5:
+        render_tab_museu(carregar_museu())
+    with tab6:
         render_tab_cronica(forcas, historico, jogadores)
 
 

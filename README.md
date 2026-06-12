@@ -11,6 +11,7 @@ para a Copa do Mundo de 2026 — a primeira com 48 seleções.
 | 🏃‍♂️ Desempenho de Atletas | Ranking de eficiência com barras de progresso e heatmap normalizado dos top 12 |
 | 🔮 Simulador e Previsões | Confronto A x B via **Distribuição de Poisson** (probabilidades, xG, placares prováveis, matriz de placares, head-to-head) + Power Ranking de título |
 | 🏆 Simulação do Torneio | **Monte Carlo da Copa 2026 com a tabela oficial**: 12 grupos reais do sorteio FIFA, melhores terceiros alocados por busca exata e chaveamento oficial (jogos 73–104) até a final no MetLife. Probabilidade de cada seleção alcançar cada fase + replay detalhado de uma Copa simulada |
+| 🏛️ Museu das Copas | Acervo completo das 22 edições (1930–2022) em `dados_copas.py`: finais, sedes, artilheiros, eras do futebol (gols/jogo) e galeria de campeões. **Isolado do modelo preditivo** — história não contamina previsão |
 | ✍️ Crônica do Especialista | Análise textual gerada a partir dos próprios dados do modelo, com dark horses e leitura tática |
 
 ## Modelo preditivo (resumo)
