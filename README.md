@@ -30,6 +30,7 @@ para a Copa do Mundo de 2026 — a primeira com 48 seleções.
 - **🏟️ Anfitrião, ⭐ craque e 🌎 continental:** bônus ajustáveis na sidebar (em 11 Copas nas Américas, só uma teve campeão europeu — CONMEBOL ganha bônus cheio, CONCACAF metade);
 - **⚔️ Matchup de estilos:** pedra-papel-tesoura tático — contra-ataque pune posse (+8%), bloco baixo neutraliza posse (-8%) e surpreende na transição (+5%);
 - **🦓 Variância de zebra:** acima de 300 pontos de gap de rating, o favorito perde 3% de λ e o azarão ganha 6% (o "dia mágico" existe);
+- **💥 Dia de gala (goleadas):** nos mesmos confrontos desiguais, em 12% dos jogos o favorito engrena (λ x1.4, azarão x0.85) — a mistura de distribuições cria a cauda gorda de goleadas que o Poisson puro subestima. A coluna "💥 Goleada" nos palpites mostra P(vitória por 3+);
 - **📈 Elo com K crescente:** recalibração com K=32/40/48 por rodada — vitória com tudo em jogo informa mais que na estreia.
 
 ### Fatores exclusivos de mata-mata

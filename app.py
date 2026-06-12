@@ -752,6 +752,12 @@ def _ajuste_confronto(lam: float, estilo_atacante: str, estilo_defensor: str,
     return lam
 
 
+# "Dia de gala": contra azarão extremo (gap >= GAP_ZEBRA), em GALA_PROB dos
+# jogos o favorito engrena — λ x1.4 (e o azarão se desorganiza, x0.85).
+# É a cauda gorda das goleadas, que o Poisson independente subestima.
+GALA_PROB, GALA_ATQ, GALA_DEF = 0.12, 1.4, 0.85
+
+
 def gols_esperados(forcas: pd.DataFrame, time_a: str, time_b: str) -> tuple[float, float]:
     """Calcula os gols esperados (lambda de Poisson) de cada equipe.
 
@@ -789,6 +795,40 @@ def matriz_poisson(lambda_a: float, lambda_b: float, rho: float = 0.0) -> np.nda
         m[1, 0] *= 1 + lambda_b * rho
         m[1, 1] *= max(0.0, 1 - rho)
     return m / m.sum()
+
+
+def matriz_confronto(forcas: pd.DataFrame, time_a: str, time_b: str,
+                     rho: float = 0.0, mult_a: float = 1.0,
+                     mult_b: float = 1.0) -> tuple[np.ndarray, float, float]:
+    """Matriz de placares completa de um confronto, com mistura "dia de gala".
+
+    Contra azarão extremo (gap de rating >= GAP_ZEBRA), a matriz vira uma
+    mistura: (1-GALA_PROB) x jogo normal + GALA_PROB x favorito inflado.
+    Retorna (matriz, lambda_a, lambda_b).
+    """
+    lambda_a, lambda_b = gols_esperados(forcas, time_a, time_b)
+    lambda_a, lambda_b = lambda_a * mult_a, lambda_b * mult_b
+    m = matriz_poisson(lambda_a, lambda_b, rho)
+
+    fa = forcas.set_index("selecao")
+    gap = float(fa.loc[time_a, "rating"] - fa.loc[time_b, "rating"])
+    if gap >= GAP_ZEBRA:
+        m_gala = matriz_poisson(lambda_a * GALA_ATQ, lambda_b * GALA_DEF, rho)
+        m = (1 - GALA_PROB) * m + GALA_PROB * m_gala
+    elif gap <= -GAP_ZEBRA:
+        m_gala = matriz_poisson(lambda_a * GALA_DEF, lambda_b * GALA_ATQ, rho)
+        m = (1 - GALA_PROB) * m + GALA_PROB * m_gala
+    return m, lambda_a, lambda_b
+
+
+def prob_goleada(matriz: np.ndarray, margem: int = 3) -> dict:
+    """P(vitória por `margem`+ gols de diferença), por lado e total."""
+    ii, jj = np.indices(matriz.shape)
+    total = matriz.sum()
+    return {
+        "goleada_a": float(matriz[ii - jj >= margem].sum() / total),
+        "goleada_b": float(matriz[jj - ii >= margem].sum() / total),
+    }
 
 
 def placar_condicional(matriz: np.ndarray, resultado: str) -> tuple[str, float]:
@@ -919,9 +959,28 @@ def _clima_mult(time: str, sede: str | None) -> float:
     return fator_clima(time, sede)[0]
 
 
+def montar_dias_de_gala(forcas: pd.DataFrame) -> set:
+    """Pares (favorito, azarão) com gap de rating >= GAP_ZEBRA — candidatos a goleada."""
+    ratings = forcas.set_index("selecao")["rating"].to_dict()
+    return {(fav, aza) for fav in ratings for aza in ratings
+            if fav != aza and ratings[fav] - ratings[aza] >= GAP_ZEBRA}
+
+
+def _aplicar_gala(rng: np.random.Generator, gala: set | None,
+                  a: str, b: str, la: float, lb: float) -> tuple[float, float]:
+    """Sorteia o 'dia de gala' do favorito (GALA_PROB) em confrontos desiguais."""
+    if gala:
+        if (a, b) in gala and rng.random() < GALA_PROB:
+            la, lb = la * GALA_ATQ, lb * GALA_DEF
+        elif (b, a) in gala and rng.random() < GALA_PROB:
+            lb, la = lb * GALA_ATQ, la * GALA_DEF
+    return la, lb
+
+
 def _simular_grupo(rng: np.random.Generator, lams: dict, times: list,
                    fixos: dict | None = None,
-                   fixtures: list | None = None) -> tuple:
+                   fixtures: list | None = None,
+                   gala: set | None = None) -> tuple:
     """Grupo simulado rodada a rodada com os confrontos e sedes REAIS.
 
     Jogos já disputados usam o placar real. Clima/altitude penalizam os λ
@@ -949,6 +1008,7 @@ def _simular_grupo(rng: np.random.Generator, lams: dict, times: list,
                         la, lb = la * 0.85, lb * 1.10
                     if stats[b]["P"] >= 6:
                         lb, la = lb * 0.85, la * 1.10
+                la, lb = _aplicar_gala(rng, gala, a, b, la, lb)
                 ga = int(rng.poisson(la))
                 gb = int(rng.poisson(lb))
             stats[a]["J"] += 1; stats[b]["J"] += 1
@@ -1009,7 +1069,8 @@ def montar_atributos_mata_mata(forcas: pd.DataFrame) -> dict:
 
 
 def _jogo_mata_mata(rng: np.random.Generator, lams: dict, a: str, b: str,
-                    atributos: dict | None = None, tardio: bool = False) -> tuple:
+                    atributos: dict | None = None, tardio: bool = False,
+                    gala: set | None = None) -> tuple:
     """Simula jogo eliminatório com fatores específicos de mata-mata.
 
     - fator_mm: síndrome/vocação de mata-mata escala o λ de cada lado;
@@ -1028,6 +1089,7 @@ def _jogo_mata_mata(rng: np.random.Generator, lams: dict, a: str, b: str,
                 la *= 0.96
             if atb["idade"] > 29:
                 lb *= 0.96
+    la, lb = _aplicar_gala(rng, gala, a, b, la, lb)
     ga = int(rng.poisson(la))
     gb = int(rng.poisson(lb))
     penaltis = ga == gb
@@ -1057,7 +1119,8 @@ def montar_fixtures(calendario: pd.DataFrame) -> dict:
 def simular_copa(rng: np.random.Generator, lams: dict, grupos: dict,
                  detalhado: bool = False, fixos: dict | None = None,
                  fixtures: dict | None = None,
-                 atributos: dict | None = None) -> dict:
+                 atributos: dict | None = None,
+                 gala: set | None = None) -> dict:
     """Simula a Copa 2026 completa (72 jogos de grupos + 31 de mata-mata).
 
     Jogos presentes em `fixos` (já disputados) entram com o placar real;
@@ -1071,7 +1134,7 @@ def simular_copa(rng: np.random.Generator, lams: dict, grupos: dict,
     primeiro, segundo, terceiros = {}, {}, []
     for g in sorted(grupos):
         ordem, stats = _simular_grupo(rng, lams, grupos[g], fixos,
-                                      fixtures.get(g) if fixtures else None)
+                                      fixtures.get(g) if fixtures else None, gala)
         primeiro[g], segundo[g] = ordem[0], ordem[1]
         terceiros.append((g, ordem[2], stats[ordem[2]]))
         if detalhado:
@@ -1106,7 +1169,8 @@ def simular_copa(rng: np.random.Generator, lams: dict, grupos: dict,
                 a, b = resolver_slot(sa, mid), resolver_slot(sb, mid)
             else:
                 a, b = vencedores[sa], vencedores[sb]
-            ga, gb, venc, pen = _jogo_mata_mata(rng, lams, a, b, atributos, tardio)
+            ga, gb, venc, pen = _jogo_mata_mata(rng, lams, a, b, atributos,
+                                                tardio, gala)
             vencedores[mid] = venc
             niveis[venc] = nivel_vencedor
             if detalhado:
@@ -1115,7 +1179,8 @@ def simular_copa(rng: np.random.Generator, lams: dict, grupos: dict,
                      "gb": gb, "b": b, "vencedor": venc, "penaltis": pen})
 
     a, b = vencedores[101], vencedores[102]
-    ga, gb, campeao, pen = _jogo_mata_mata(rng, lams, a, b, atributos, tardio=True)
+    ga, gb, campeao, pen = _jogo_mata_mata(rng, lams, a, b, atributos,
+                                           tardio=True, gala=gala)
     niveis[campeao] = 6
     if detalhado:
         detalhes["partidas"].append(
@@ -1137,6 +1202,7 @@ def rodar_monte_carlo(n_sims: int, seed: int, forcas: pd.DataFrame,
     fixos = extrair_resultados_fixos(calendario) if calendario is not None else None
     fixtures = montar_fixtures(calendario) if calendario is not None else None
     atributos = montar_atributos_mata_mata(forcas)
+    gala = montar_dias_de_gala(forcas)
 
     times = forcas["selecao"].tolist()
     contagem_nivel = {t: np.zeros(7, dtype=int) for t in times}
@@ -1144,7 +1210,7 @@ def rodar_monte_carlo(n_sims: int, seed: int, forcas: pd.DataFrame,
 
     for _ in range(n_sims):
         r = simular_copa(rng, lams, grupos, fixos=fixos, fixtures=fixtures,
-                         atributos=atributos)
+                         atributos=atributos, gala=gala)
         for t, nv in r["niveis"].items():
             contagem_nivel[t][nv] += 1
         par_final = tuple(sorted((r["campeao"], r["vice"])))
@@ -1382,11 +1448,10 @@ def prever_jogo(forcas: pd.DataFrame, time_a: str, time_b: str,
     """Previsão compacta: probabilidades + placar típico DO desfecho apontado.
 
     `mult_a`/`mult_b` aplicam fatores contextuais (clima, descanso,
-    jogo morto, desfalques) sobre os gols esperados.
+    jogo morto, desfalques). Inclui a mistura "dia de gala" e a chance
+    de goleada (3+ gols de margem).
     """
-    lambda_a, lambda_b = gols_esperados(forcas, time_a, time_b)
-    lambda_a, lambda_b = lambda_a * mult_a, lambda_b * mult_b
-    matriz = matriz_poisson(lambda_a, lambda_b, rho)
+    matriz, _, _ = matriz_confronto(forcas, time_a, time_b, rho, mult_a, mult_b)
     probs = probabilidades_resultado(matriz)
     if probs["vitoria_a"] >= max(probs["empate"], probs["vitoria_b"]):
         chave, palpite = "vitoria_a", f"Vitória {time_a}"
@@ -1395,9 +1460,11 @@ def prever_jogo(forcas: pd.DataFrame, time_a: str, time_b: str,
     else:
         chave, palpite = "empate", "Empate"
     placar, p_placar = placar_condicional(matriz, chave)
+    goleadas = prob_goleada(matriz)
     return {"vitoria_a": probs["vitoria_a"] * 100, "empate": probs["empate"] * 100,
             "vitoria_b": probs["vitoria_b"] * 100, "placar": placar,
-            "p_placar": p_placar * 100, "palpite": palpite}
+            "p_placar": p_placar * 100, "palpite": palpite,
+            "goleada": (goleadas["goleada_a"] + goleadas["goleada_b"]) * 100}
 
 
 def render_radar_cartoes(cartoes_base: pd.DataFrame) -> pd.DataFrame:
@@ -1492,6 +1559,7 @@ def render_palpites_calendario(forcas: pd.DataFrame, calendario: pd.DataFrame,
             "Empate (%)": round(prev["empate"], 1),
             f"Vit. visitante (%)": round(prev["vitoria_b"], 1),
             "Placar típico do palpite": f"{prev['placar']} ({prev['p_placar']:.0f}%)",
+            "Goleada 3+ (%)": round(prev["goleada"], 1),
             "Palpite do modelo": prev["palpite"],
             "Contexto": " · ".join(flags) if flags else "—",
             "Resultado real": resultado_str,
@@ -1506,6 +1574,10 @@ def render_palpites_calendario(forcas: pd.DataFrame, calendario: pd.DataFrame,
                 "Empate", format="%.1f%%", min_value=0, max_value=100),
             "Vit. visitante (%)": st.column_config.ProgressColumn(
                 "Vit. 2º time", format="%.1f%%", min_value=0, max_value=100),
+            "Goleada 3+ (%)": st.column_config.ProgressColumn(
+                "💥 Goleada", format="%.1f%%", min_value=0, max_value=50,
+                help="Probabilidade de vitória por 3+ gols de diferença "
+                     "(qualquer lado), já com a mistura 'dia de gala'"),
         },
     )
     st.caption(
@@ -1583,16 +1655,20 @@ def render_tab_simulador(forcas: pd.DataFrame, historico: pd.DataFrame,
     if time_a == time_b:
         st.warning("Escolha duas seleções diferentes para simular o confronto.")
     else:
-        lambda_a, lambda_b = gols_esperados(forcas, time_a, time_b)
-        matriz = matriz_poisson(lambda_a, lambda_b, rho)
+        matriz, lambda_a, lambda_b = matriz_confronto(forcas, time_a, time_b, rho)
         probs = probabilidades_resultado(matriz)
+        goleadas = prob_goleada(matriz)
 
-        m1, m2, m3, m4, m5 = st.columns(5)
+        m1, m2, m3, m4, m5, m6 = st.columns(6)
         m1.metric(f"Vitória {time_a}", f"{probs['vitoria_a']*100:.1f}%")
         m2.metric("Empate", f"{probs['empate']*100:.1f}%")
         m3.metric(f"Vitória {time_b}", f"{probs['vitoria_b']*100:.1f}%")
         m4.metric(f"xG {time_a}", f"{lambda_a:.2f}")
         m5.metric(f"xG {time_b}", f"{lambda_b:.2f}")
+        m6.metric("💥 Goleada 3+",
+                  f"{(goleadas['goleada_a'] + goleadas['goleada_b'])*100:.1f}%",
+                  f"{goleadas['goleada_a']*100:.0f}% {time_a} · "
+                  f"{goleadas['goleada_b']*100:.0f}% {time_b}")
 
         fig_prob = go.Figure(go.Bar(
             x=[probs["vitoria_a"] * 100, probs["empate"] * 100, probs["vitoria_b"] * 100],
@@ -1791,7 +1867,8 @@ def render_tab_torneio(forcas: pd.DataFrame, calendario: pd.DataFrame) -> None:
         copa = simular_copa(rng, lams, grupos, detalhado=True,
                             fixos=extrair_resultados_fixos(calendario),
                             fixtures=montar_fixtures(calendario),
-                            atributos=montar_atributos_mata_mata(forcas))
+                            atributos=montar_atributos_mata_mata(forcas),
+                            gala=montar_dias_de_gala(forcas))
 
         st.success(
             f"🏆 **Campeão: {copa['campeao']}** — venceu {copa['vice']} na decisão."
