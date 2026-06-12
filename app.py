@@ -167,66 +167,71 @@ def carregar_forcas_2026() -> pd.DataFrame:
     """Parâmetros de força das 48 classificadas, nos GRUPOS OFICIAIS do sorteio.
 
     Grupos conforme o sorteio oficial da FIFA (dez/2025) + repescagens (mar/2026).
-    - ataque: média esperada de gols marcados por jogo contra adversário mediano
-    - defesa: média esperada de gols sofridos por jogo contra adversário mediano
-    - forma_recente: aproveitamento (%) nos últimos 12 meses (amistosos + eliminatórias)
+    - ataque/defesa: gols esperados marcados/sofridos contra adversário mediano
+    - forma_recente: aproveitamento (%) nos últimos 12 meses
     - rating: índice Elo-like sintético (calibrado em rankings reais; mock)
+    - confed: confederação (bônus continental — Copa nas Américas)
+    - estilo: posse / contra / bloco / equilibrado (matchup tático)
+    - idade: média etária do elenco (veteranos pagam o "imposto das 8 partidas")
+    - penaltis: pedigree em disputas de pênaltis, 0–100 (goleiro + histórico)
+    - fator_mm: rendimento histórico em mata-mata vs fase de grupos (~0.93–1.07)
     """
     dados = [
-        # (seleção, grupo, ataque, defesa, forma_recente, rating)
-        ("México",              "A", 1.35, 1.10, 58, 1700),
-        ("Coreia do Sul",       "A", 1.30, 1.15, 60, 1670),
-        ("Rep. Checa",          "A", 1.30, 1.15, 57, 1655),
-        ("África do Sul",       "A", 1.10, 1.25, 53, 1585),
-        ("Canadá",              "B", 1.35, 1.10, 62, 1685),
-        ("Bósnia e Herzegovina","B", 1.20, 1.20, 54, 1600),
-        ("Catar",               "B", 1.10, 1.30, 50, 1560),
-        ("Suíça",               "B", 1.40, 1.05, 64, 1750),
-        ("Brasil",              "C", 1.95, 0.85, 72, 1920),
-        ("Marrocos",            "C", 1.40, 0.80, 71, 1800),
-        ("Haiti",               "C", 0.90, 1.40, 44, 1500),
-        ("Escócia",             "C", 1.25, 1.15, 58, 1645),
-        ("Estados Unidos",      "D", 1.30, 1.15, 60, 1690),
-        ("Paraguai",            "D", 1.20, 1.00, 60, 1665),
-        ("Austrália",           "D", 1.25, 1.15, 58, 1640),
-        ("Turquia",             "D", 1.45, 1.10, 63, 1720),
-        ("Alemanha",            "E", 1.80, 1.00, 69, 1840),
-        ("Curaçao",             "E", 0.95, 1.35, 47, 1525),
-        ("Costa do Marfim",     "E", 1.30, 1.10, 60, 1670),
-        ("Equador",             "E", 1.30, 0.90, 64, 1730),
-        ("Países Baixos",       "F", 1.75, 0.95, 70, 1845),
-        ("Japão",               "F", 1.50, 1.00, 68, 1785),
-        ("Suécia",              "F", 1.35, 1.10, 58, 1660),
-        ("Tunísia",             "F", 1.15, 1.10, 55, 1610),
-        ("Bélgica",             "G", 1.65, 1.05, 62, 1770),
-        ("Egito",               "G", 1.25, 1.00, 64, 1680),
-        ("Irã",                 "G", 1.25, 1.10, 61, 1650),
-        ("Nova Zelândia",       "G", 1.00, 1.30, 48, 1530),
-        ("Espanha",             "H", 2.00, 0.75, 81, 1965),
-        ("Cabo Verde",          "H", 1.05, 1.25, 52, 1565),
-        ("Arábia Saudita",      "H", 1.10, 1.25, 52, 1570),
-        ("Uruguai",             "H", 1.55, 0.90, 66, 1790),
-        ("França",              "I", 2.05, 0.80, 78, 1985),
-        ("Senegal",             "I", 1.40, 1.00, 65, 1745),
-        ("Iraque",              "I", 0.95, 1.35, 46, 1520),
-        ("Noruega",             "I", 1.65, 1.10, 72, 1765),
-        ("Argentina",           "J", 2.10, 0.70, 84, 2010),
-        ("Argélia",             "J", 1.30, 1.10, 62, 1675),
-        ("Áustria",             "J", 1.45, 1.05, 66, 1740),
-        ("Jordânia",            "J", 1.00, 1.30, 50, 1545),
-        ("Portugal",            "K", 1.90, 0.90, 73, 1880),
-        ("RD Congo",            "K", 1.05, 1.25, 54, 1580),
-        ("Uzbequistão",         "K", 1.10, 1.20, 55, 1590),
-        ("Colômbia",            "K", 1.60, 0.95, 69, 1810),
-        ("Inglaterra",          "L", 1.85, 0.85, 75, 1905),
-        ("Croácia",             "L", 1.45, 1.05, 63, 1760),
-        ("Gana",                "L", 1.20, 1.20, 53, 1605),
-        ("Panamá",              "L", 1.10, 1.25, 52, 1575),
+        # (seleção, grupo, ataque, defesa, forma, rating,
+        #  confed, estilo, idade, pênaltis, fator_mm)
+        ("México",              "A", 1.35, 1.10, 58, 1700, "CONCACAF", "posse",       27.1, 60, 0.93),
+        ("Coreia do Sul",       "A", 1.30, 1.15, 60, 1670, "AFC",      "contra",      27.5, 60, 1.00),
+        ("Rep. Checa",          "A", 1.30, 1.15, 57, 1655, "UEFA",     "equilibrado", 26.8, 62, 1.00),
+        ("África do Sul",       "A", 1.10, 1.25, 53, 1585, "CAF",      "bloco",       26.5, 55, 1.00),
+        ("Canadá",              "B", 1.35, 1.10, 62, 1685, "CONCACAF", "contra",      26.2, 55, 1.00),
+        ("Bósnia e Herzegovina","B", 1.20, 1.20, 54, 1600, "UEFA",     "equilibrado", 28.4, 58, 1.00),
+        ("Catar",               "B", 1.10, 1.30, 50, 1560, "AFC",      "bloco",       27.8, 55, 1.00),
+        ("Suíça",               "B", 1.40, 1.05, 64, 1750, "UEFA",     "equilibrado", 27.9, 70, 1.02),
+        ("Brasil",              "C", 1.95, 0.85, 72, 1920, "CONMEBOL", "equilibrado", 26.9, 70, 1.00),
+        ("Marrocos",            "C", 1.40, 0.80, 71, 1800, "CAF",      "bloco",       27.0, 78, 1.05),
+        ("Haiti",               "C", 0.90, 1.40, 44, 1500, "CONCACAF", "bloco",       26.0, 50, 1.00),
+        ("Escócia",             "C", 1.25, 1.15, 58, 1645, "UEFA",     "bloco",       27.6, 55, 0.97),
+        ("Estados Unidos",      "D", 1.30, 1.15, 60, 1690, "CONCACAF", "contra",      25.8, 62, 0.97),
+        ("Paraguai",            "D", 1.20, 1.00, 60, 1665, "CONMEBOL", "bloco",       27.3, 65, 1.00),
+        ("Austrália",           "D", 1.25, 1.15, 58, 1640, "AFC",      "bloco",       27.7, 68, 1.00),
+        ("Turquia",             "D", 1.45, 1.10, 63, 1720, "UEFA",     "equilibrado", 26.4, 58, 1.00),
+        ("Alemanha",            "E", 1.80, 1.00, 69, 1840, "UEFA",     "posse",       26.7, 85, 1.03),
+        ("Curaçao",             "E", 0.95, 1.35, 47, 1525, "CONCACAF", "bloco",       27.2, 50, 1.00),
+        ("Costa do Marfim",     "E", 1.30, 1.10, 60, 1670, "CAF",      "contra",      26.6, 62, 1.00),
+        ("Equador",             "E", 1.30, 0.90, 64, 1730, "CONMEBOL", "contra",      25.9, 60, 1.00),
+        ("Países Baixos",       "F", 1.75, 0.95, 70, 1845, "UEFA",     "posse",       27.4, 60, 1.02),
+        ("Japão",               "F", 1.50, 1.00, 68, 1785, "AFC",      "posse",       26.8, 52, 0.97),
+        ("Suécia",              "F", 1.35, 1.10, 58, 1660, "UEFA",     "equilibrado", 27.5, 60, 1.00),
+        ("Tunísia",             "F", 1.15, 1.10, 55, 1610, "CAF",      "bloco",       27.9, 58, 1.00),
+        ("Bélgica",             "G", 1.65, 1.05, 62, 1770, "UEFA",     "equilibrado", 28.6, 60, 0.95),
+        ("Egito",               "G", 1.25, 1.00, 64, 1680, "CAF",      "bloco",       27.4, 60, 1.00),
+        ("Irã",                 "G", 1.25, 1.10, 61, 1650, "AFC",      "bloco",       28.2, 62, 1.00),
+        ("Nova Zelândia",       "G", 1.00, 1.30, 48, 1530, "OFC",      "bloco",       26.9, 55, 1.00),
+        ("Espanha",             "H", 2.00, 0.75, 81, 1965, "UEFA",     "posse",       25.4, 58, 0.98),
+        ("Cabo Verde",          "H", 1.05, 1.25, 52, 1565, "CAF",      "bloco",       27.1, 55, 1.00),
+        ("Arábia Saudita",      "H", 1.10, 1.25, 52, 1570, "AFC",      "bloco",       27.6, 55, 1.00),
+        ("Uruguai",             "H", 1.55, 0.90, 66, 1790, "CONMEBOL", "equilibrado", 27.2, 68, 1.02),
+        ("França",              "I", 2.05, 0.80, 78, 1985, "UEFA",     "contra",      26.5, 65, 1.06),
+        ("Senegal",             "I", 1.40, 1.00, 65, 1745, "CAF",      "contra",      26.7, 68, 1.00),
+        ("Iraque",              "I", 0.95, 1.35, 46, 1520, "AFC",      "bloco",       26.3, 52, 1.00),
+        ("Noruega",             "I", 1.65, 1.10, 72, 1765, "UEFA",     "contra",      25.7, 55, 0.97),
+        ("Argentina",           "J", 2.10, 0.70, 84, 2010, "CONMEBOL", "posse",       28.8, 90, 1.06),
+        ("Argélia",             "J", 1.30, 1.10, 62, 1675, "CAF",      "contra",      27.8, 60, 1.00),
+        ("Áustria",             "J", 1.45, 1.05, 66, 1740, "UEFA",     "equilibrado", 27.0, 58, 1.00),
+        ("Jordânia",            "J", 1.00, 1.30, 50, 1545, "AFC",      "bloco",       27.3, 55, 1.00),
+        ("Portugal",            "K", 1.90, 0.90, 73, 1880, "UEFA",     "posse",       27.8, 65, 0.98),
+        ("RD Congo",            "K", 1.05, 1.25, 54, 1580, "CAF",      "equilibrado", 26.9, 65, 1.00),
+        ("Uzbequistão",         "K", 1.10, 1.20, 55, 1590, "AFC",      "equilibrado", 26.4, 55, 1.00),
+        ("Colômbia",            "K", 1.60, 0.95, 69, 1810, "CONMEBOL", "posse",       27.7, 65, 1.00),
+        ("Inglaterra",          "L", 1.85, 0.85, 75, 1905, "UEFA",     "equilibrado", 26.3, 58, 0.98),
+        ("Croácia",             "L", 1.45, 1.05, 63, 1760, "UEFA",     "posse",       29.3, 88, 1.07),
+        ("Gana",                "L", 1.20, 1.20, 53, 1605, "CAF",      "contra",      25.9, 55, 1.00),
+        ("Panamá",              "L", 1.10, 1.25, 52, 1575, "CONCACAF", "bloco",       28.0, 55, 1.00),
     ]
-    return pd.DataFrame(
-        dados,
-        columns=["selecao", "grupo", "ataque", "defesa", "forma_recente", "rating"],
-    )
+    return pd.DataFrame(dados, columns=[
+        "selecao", "grupo", "ataque", "defesa", "forma_recente", "rating",
+        "confed", "estilo", "idade", "penaltis", "fator_mm",
+    ])
 
 
 @st.cache_data
@@ -491,7 +496,8 @@ def aplicar_resultados(forcas: pd.DataFrame, calendario: pd.DataFrame) -> tuple:
     """Recalibra o modelo com os resultados reais já disputados.
 
     Para cada jogo, em ordem cronológica:
-    - rating: atualização Elo clássica (K=40, padrão para Copas do Mundo);
+    - rating: atualização Elo com K CRESCENTE por rodada (32/40/48) — vitória
+      na 3ª rodada, com tudo em jogo, informa mais que na estreia;
     - forma_recente: média móvel exponencial em direção ao resultado (85/15);
     - ataque/defesa: ajuste suave (β=0.15) em direção aos gols observados,
       normalizados pela força do adversário (marcar 2 no Haiti vale menos
@@ -508,12 +514,14 @@ def aplicar_resultados(forcas: pd.DataFrame, calendario: pd.DataFrame) -> tuple:
     fa[colunas_num] = fa[colunas_num].astype(float)
     defesa_media = forcas["defesa"].mean()
     ataque_medio = forcas["ataque"].mean()
-    K, BETA = 40.0, 0.15
+    K_POR_RODADA = {1: 32.0, 2: 40.0, 3: 48.0}
+    BETA = 0.15
     log = []
 
     for _, j in jogados.iterrows():
         a, b = j["time_a"], j["time_b"]
         ga, gb = _parse_placar(j["resultado"])
+        K = K_POR_RODADA.get(int(j["rodada"]), 40.0)
 
         ra, rb = fa.loc[a, "rating"], fa.loc[b, "rating"]
         esperado_a = 1 / (1 + 10 ** ((rb - ra) / 400))
@@ -666,7 +674,8 @@ def fatores_contextuais(jogo: pd.Series, calendario: pd.DataFrame,
 
 @st.cache_data
 def aplicar_fatores_extras(forcas: pd.DataFrame, jogadores: pd.DataFrame,
-                           bonus_mando: float, impacto_craque: float) -> tuple:
+                           bonus_mando: float, impacto_craque: float,
+                           bonus_continental: float = 4.0) -> tuple:
     """Fatores contextuais que impactam a probabilidade de vitória.
 
     - Anfitrião (EUA/México/Canadá): jogar em casa vale historicamente
@@ -674,6 +683,9 @@ def aplicar_fatores_extras(forcas: pd.DataFrame, jogadores: pd.DataFrame,
     - Craque: o melhor Índice de Eficiência da seleção (aba de atletas)
       escala o ataque em até +impacto% — um decisivo de elite muda jogos
       de mata-mata. Só bonifica (não penaliza quem não tem atleta listado).
+    - Continental: em 11 Copas nas Américas, só UMA teve campeão europeu
+      (Alemanha 2014). CONMEBOL ganha o bônus cheio; CONCACAF não-anfitriã,
+      metade (clima, fuso e torcida familiares).
 
     Retorna (forcas_ajustadas, log_de_fatores).
     """
@@ -689,6 +701,13 @@ def aplicar_fatores_extras(forcas: pd.DataFrame, jogadores: pd.DataFrame,
             fa.loc[idx, "ataque"] *= 1 + bonus_mando / 100
             fa.loc[idx, "defesa"] *= 1 - bonus_mando / 200
             motivos.append(f"🏟️ anfitrião (+{bonus_mando:.0f}% ataque)")
+        if bonus_continental > 0 and time not in ANFITRIOES:
+            if linha["confed"] == "CONMEBOL":
+                fa.loc[idx, "ataque"] *= 1 + bonus_continental / 100
+                motivos.append(f"🌎 Copa nas Américas (+{bonus_continental:.0f}% ataque)")
+            elif linha["confed"] == "CONCACAF":
+                fa.loc[idx, "ataque"] *= 1 + bonus_continental / 200
+                motivos.append(f"🌎 Copa nas Américas (+{bonus_continental / 2:.0f}% ataque)")
         if time in melhor_craque.index and impacto_craque > 0:
             peso = max(0.0, min((melhor_craque[time] - 60) / 40, 1.0))
             if peso > 0:
@@ -707,12 +726,38 @@ def aplicar_fatores_extras(forcas: pd.DataFrame, jogadores: pd.DataFrame,
 
 MAX_GOLS = 7  # teto da matriz de placares (0 a 7 gols por equipe)
 
+# Matchup tático (pedra-papel-tesoura): multiplicador no ataque de quem ataca
+# contra o estilo defensivo do adversário. Bloco baixo neutraliza posse;
+# contra-ataque pune linha alta; bloco surpreende posse na transição.
+MATCHUP_ESTILOS = {
+    ("contra", "posse"): 1.08,
+    ("posse", "bloco"): 0.92,
+    ("bloco", "posse"): 1.05,
+}
+
+# Zebra extrema: Poisson subestima o "dia mágico" do azarão. Acima deste gap
+# de rating, o favorito perde um pouco de λ e o azarão ganha.
+GAP_ZEBRA = 300
+
+
+def _ajuste_confronto(lam: float, estilo_atacante: str, estilo_defensor: str,
+                      rating_atacante: float, rating_defensor: float) -> float:
+    """Aplica matchup de estilos + variância de zebra a um λ direcional."""
+    lam *= MATCHUP_ESTILOS.get((estilo_atacante, estilo_defensor), 1.0)
+    gap = rating_atacante - rating_defensor
+    if gap >= GAP_ZEBRA:        # atacante é favorito esmagador
+        lam *= 0.97
+    elif gap <= -GAP_ZEBRA:     # atacante é a zebra: dia mágico existe
+        lam *= 1.06
+    return lam
+
 
 def gols_esperados(forcas: pd.DataFrame, time_a: str, time_b: str) -> tuple[float, float]:
     """Calcula os gols esperados (lambda de Poisson) de cada equipe.
 
-    lambda_A = ataque_A x (defesa_B / defesa_média) x fator_forma_A
-    O fator de forma escala ±15% conforme o aproveitamento recente.
+    lambda_A = ataque_A x (defesa_B / defesa_média) x fator_forma_A,
+    ajustado por matchup de estilos e variância de zebra.
+    (Mantenha em sincronia com `_precomputar_lambdas`, a versão em lote.)
     """
     fa = forcas.set_index("selecao")
     defesa_media = forcas["defesa"].mean()
@@ -720,6 +765,8 @@ def gols_esperados(forcas: pd.DataFrame, time_a: str, time_b: str) -> tuple[floa
     def _lambda(atacante: str, defensor: str) -> float:
         fator_forma = 0.85 + 0.30 * (fa.loc[atacante, "forma_recente"] / 100)
         lam = fa.loc[atacante, "ataque"] * (fa.loc[defensor, "defesa"] / defesa_media) * fator_forma
+        lam = _ajuste_confronto(lam, fa.loc[atacante, "estilo"], fa.loc[defensor, "estilo"],
+                                fa.loc[atacante, "rating"], fa.loc[defensor, "rating"])
         return max(0.15, float(lam))
 
     return _lambda(time_a, time_b), _lambda(time_b, time_a)
@@ -848,7 +895,10 @@ NIVEIS_TORNEIO = ["Grupos", "Fase de 32", "Oitavas", "Quartas",
 
 
 def _precomputar_lambdas(forcas: pd.DataFrame) -> dict:
-    """Pré-calcula λ(a contra b) para todos os pares — acelera o Monte Carlo."""
+    """Pré-calcula λ(a contra b) para todos os pares — acelera o Monte Carlo.
+
+    Espelha `gols_esperados` (forma, matchup de estilos, zebra) em lote.
+    """
     fa = forcas.set_index("selecao")
     defesa_media = forcas["defesa"].mean()
     lams = {}
@@ -856,7 +906,10 @@ def _precomputar_lambdas(forcas: pd.DataFrame) -> dict:
         base = fa.loc[a, "ataque"] * (0.85 + 0.30 * fa.loc[a, "forma_recente"] / 100)
         for b in fa.index:
             if a != b:
-                lams[(a, b)] = max(0.15, float(base * fa.loc[b, "defesa"] / defesa_media))
+                lam = base * fa.loc[b, "defesa"] / defesa_media
+                lam = _ajuste_confronto(lam, fa.loc[a, "estilo"], fa.loc[b, "estilo"],
+                                        fa.loc[a, "rating"], fa.loc[b, "rating"])
+                lams[(a, b)] = max(0.15, float(lam))
     return lams
 
 
@@ -945,13 +998,46 @@ def _alocar_terceiros(grupos_qualificados: set) -> dict:
     return alocacao
 
 
-def _jogo_mata_mata(rng: np.random.Generator, lams: dict, a: str, b: str) -> tuple:
-    """Simula jogo eliminatório; empate vai a 'pênaltis' ponderados pelos λ."""
-    ga = int(rng.poisson(lams[(a, b)]))
-    gb = int(rng.poisson(lams[(b, a)]))
+def montar_atributos_mata_mata(forcas: pd.DataFrame) -> dict:
+    """Atributos por seleção usados só no mata-mata: pênaltis, síndrome, idade."""
+    return {
+        linha["selecao"]: {"penaltis": float(linha["penaltis"]),
+                           "fator_mm": float(linha["fator_mm"]),
+                           "idade": float(linha["idade"])}
+        for _, linha in forcas.iterrows()
+    }
+
+
+def _jogo_mata_mata(rng: np.random.Generator, lams: dict, a: str, b: str,
+                    atributos: dict | None = None, tardio: bool = False) -> tuple:
+    """Simula jogo eliminatório com fatores específicos de mata-mata.
+
+    - fator_mm: síndrome/vocação de mata-mata escala o λ de cada lado;
+    - tardio (quartas em diante): elencos com idade média > 29 pagam o
+      "imposto das 8 partidas" (λ x0.96);
+    - empate: 'pênaltis' decididos 50% pelo jogo (razão dos λ) e 50% pelo
+      pedigree de shootout (goleiro + histórico, escala 0–100).
+    """
+    la, lb = lams[(a, b)], lams[(b, a)]
+    if atributos:
+        ata, atb = atributos[a], atributos[b]
+        la *= ata["fator_mm"]
+        lb *= atb["fator_mm"]
+        if tardio:
+            if ata["idade"] > 29:
+                la *= 0.96
+            if atb["idade"] > 29:
+                lb *= 0.96
+    ga = int(rng.poisson(la))
+    gb = int(rng.poisson(lb))
     penaltis = ga == gb
     if penaltis:
-        p_a = lams[(a, b)] / (lams[(a, b)] + lams[(b, a)])
+        p_jogo = la / (la + lb)
+        if atributos:
+            p_pen = min(0.75, max(0.25, 0.5 + (ata["penaltis"] - atb["penaltis"]) / 250))
+            p_a = 0.5 * p_jogo + 0.5 * p_pen
+        else:
+            p_a = p_jogo
         vencedor = a if rng.random() < p_a else b
     else:
         vencedor = a if ga > gb else b
@@ -970,7 +1056,8 @@ def montar_fixtures(calendario: pd.DataFrame) -> dict:
 
 def simular_copa(rng: np.random.Generator, lams: dict, grupos: dict,
                  detalhado: bool = False, fixos: dict | None = None,
-                 fixtures: dict | None = None) -> dict:
+                 fixtures: dict | None = None,
+                 atributos: dict | None = None) -> dict:
     """Simula a Copa 2026 completa (72 jogos de grupos + 31 de mata-mata).
 
     Jogos presentes em `fixos` (já disputados) entram com o placar real;
@@ -1013,12 +1100,13 @@ def simular_copa(rng: np.random.Generator, lams: dict, grupos: dict,
     rodadas = [("Fase de 32", R32_ESTRUTURA, 2), ("Oitavas", R16_ESTRUTURA, 3),
                ("Quartas", QF_ESTRUTURA, 4), ("Semifinal", SF_ESTRUTURA, 5)]
     for nome_fase, estrutura, nivel_vencedor in rodadas:
+        tardio = nome_fase in ("Quartas", "Semifinal")
         for mid, (sa, sb) in estrutura.items():
             if nome_fase == "Fase de 32":
                 a, b = resolver_slot(sa, mid), resolver_slot(sb, mid)
             else:
                 a, b = vencedores[sa], vencedores[sb]
-            ga, gb, venc, pen = _jogo_mata_mata(rng, lams, a, b)
+            ga, gb, venc, pen = _jogo_mata_mata(rng, lams, a, b, atributos, tardio)
             vencedores[mid] = venc
             niveis[venc] = nivel_vencedor
             if detalhado:
@@ -1027,7 +1115,7 @@ def simular_copa(rng: np.random.Generator, lams: dict, grupos: dict,
                      "gb": gb, "b": b, "vencedor": venc, "penaltis": pen})
 
     a, b = vencedores[101], vencedores[102]
-    ga, gb, campeao, pen = _jogo_mata_mata(rng, lams, a, b)
+    ga, gb, campeao, pen = _jogo_mata_mata(rng, lams, a, b, atributos, tardio=True)
     niveis[campeao] = 6
     if detalhado:
         detalhes["partidas"].append(
@@ -1048,13 +1136,15 @@ def rodar_monte_carlo(n_sims: int, seed: int, forcas: pd.DataFrame,
     grupos = forcas.groupby("grupo")["selecao"].apply(list).to_dict()
     fixos = extrair_resultados_fixos(calendario) if calendario is not None else None
     fixtures = montar_fixtures(calendario) if calendario is not None else None
+    atributos = montar_atributos_mata_mata(forcas)
 
     times = forcas["selecao"].tolist()
     contagem_nivel = {t: np.zeros(7, dtype=int) for t in times}
     finais, campeoes = {}, {}
 
     for _ in range(n_sims):
-        r = simular_copa(rng, lams, grupos, fixos=fixos, fixtures=fixtures)
+        r = simular_copa(rng, lams, grupos, fixos=fixos, fixtures=fixtures,
+                         atributos=atributos)
         for t, nv in r["niveis"].items():
             contagem_nivel[t][nv] += 1
         par_final = tuple(sorted((r["campeao"], r["vice"])))
@@ -1125,13 +1215,19 @@ def render_sidebar(historico: pd.DataFrame) -> dict:
             "Impacto do craque (%)", 0, 12, 5,
             help="Bônus máximo de ataque pelo melhor Índice de Eficiência da "
                  "seleção (aba Desempenho de Atletas).")
-    st.sidebar.caption("Dados fictícios para demonstração, calibrados em padrões reais. v1.1")
+        bonus_continental = st.slider(
+            "Fator continental (%)", 0, 8, 4,
+            help="Em 11 Copas nas Américas, só uma teve campeão europeu "
+                 "(Alemanha 2014). CONMEBOL recebe o bônus cheio; CONCACAF "
+                 "não-anfitriã, metade.")
+    st.sidebar.caption("Dados fictícios para demonstração, calibrados em padrões reais. v1.2")
 
     if not selecoes:
         selecoes = selecoes_disponiveis
         st.sidebar.warning("Nenhuma seleção marcada — exibindo todas.")
     return {"selecoes": selecoes, "edicoes": edicoes, "rho": rho,
-            "bonus_mando": bonus_mando, "impacto_craque": impacto_craque}
+            "bonus_mando": bonus_mando, "impacto_craque": impacto_craque,
+            "bonus_continental": bonus_continental}
 
 
 def render_tab_historico(historico: pd.DataFrame, filtros: dict) -> None:
@@ -1372,9 +1468,13 @@ def render_palpites_calendario(forcas: pd.DataFrame, calendario: pd.DataFrame,
     )
 
     desfalques = desfalques_por_selecao(cartoes) if cartoes is not None else {}
+    estilos = forcas.set_index("selecao")["estilo"].to_dict()
     linhas = []
     for _, jogo in jogos_dia.iterrows():
         mult_a, mult_b, flags = fatores_contextuais(jogo, calendario, desfalques)
+        ea, eb = estilos.get(jogo["time_a"]), estilos.get(jogo["time_b"])
+        if (ea, eb) in MATCHUP_ESTILOS or (eb, ea) in MATCHUP_ESTILOS:
+            flags.append(f"⚔️ matchup tático: {ea} x {eb}")
         prev = prever_jogo(forcas, jogo["time_a"], jogo["time_b"], rho,
                            mult_a, mult_b)
         resultado_str = "—"
@@ -1420,7 +1520,8 @@ def render_recalibragem(ajustes: pd.DataFrame) -> None:
         return
     with st.expander(f"🔄 Modelo recalibrado com {len(ajustes)} resultado(s) real(is)"):
         st.markdown(
-            "Cada placar real atualiza **rating** (Elo, K=40), **forma recente** "
+            "Cada placar real atualiza **rating** (Elo, K crescente 32/40/48 "
+            "por rodada), **forma recente** "
             "(média móvel 85/15) e **ataque/defesa** (ajuste β=0.15 normalizado "
             "pela força do adversário). Jogos disputados também entram travados "
             "na Simulação do Torneio."
@@ -1604,6 +1705,30 @@ def render_tab_torneio(forcas: pd.DataFrame, calendario: pd.DataFrame) -> None:
                 for t in grupos[g]:
                     st.markdown(f"- {t}")
 
+    with st.expander("🧬 Atributos de mata-mata por seleção"):
+        st.markdown(
+            "Fatores que só pesam no jogo único: **estilo** (matchup tático "
+            "pedra-papel-tesoura), **pênaltis** (goleiro + histórico de shootouts, "
+            "decide 50% dos empates), **síndrome de mata-mata** (rendimento "
+            "histórico no jogo único vs fase de grupos) e **idade média** "
+            "(elencos acima de 29 anos perdem 4% das quartas em diante)."
+        )
+        st.dataframe(
+            forcas[["selecao", "grupo", "confed", "estilo", "idade",
+                    "penaltis", "fator_mm"]].sort_values("penaltis", ascending=False),
+            hide_index=True, use_container_width=True, height=320,
+            column_config={
+                "selecao": "Seleção", "grupo": "Grupo", "confed": "Confed.",
+                "estilo": "Estilo",
+                "idade": st.column_config.NumberColumn("Idade média", format="%.1f"),
+                "penaltis": st.column_config.ProgressColumn(
+                    "🥅 Pênaltis", format="%d", min_value=0, max_value=100),
+                "fator_mm": st.column_config.NumberColumn(
+                    "Fator mata-mata", format="%.2f",
+                    help="<1 = rende menos no jogo único; >1 = casca de mata-mata"),
+            },
+        )
+
     c1, c2 = st.columns(2)
     n_sims = c1.slider("⚙️ Número de Copas simuladas", 200, 5000, 1000, step=200,
                        help="Mais simulações = probabilidades mais estáveis (e mais lentas).")
@@ -1665,7 +1790,8 @@ def render_tab_torneio(forcas: pd.DataFrame, calendario: pd.DataFrame) -> None:
         lams = _precomputar_lambdas(forcas)
         copa = simular_copa(rng, lams, grupos, detalhado=True,
                             fixos=extrair_resultados_fixos(calendario),
-                            fixtures=montar_fixtures(calendario))
+                            fixtures=montar_fixtures(calendario),
+                            atributos=montar_atributos_mata_mata(forcas))
 
         st.success(
             f"🏆 **Campeão: {copa['campeao']}** — venceu {copa['vice']} na decisão."
@@ -1865,7 +1991,8 @@ def main() -> None:
     # Recalibra com resultados reais e aplica fatores contextuais (sidebar)
     forcas, ajustes = aplicar_resultados(carregar_forcas_2026(), calendario)
     forcas, fatores = aplicar_fatores_extras(
-        forcas, jogadores, filtros["bonus_mando"], filtros["impacto_craque"])
+        forcas, jogadores, filtros["bonus_mando"], filtros["impacto_craque"],
+        filtros["bonus_continental"])
     if not ajustes.empty:
         st.sidebar.success(
             f"🔄 Modelo recalibrado com {len(ajustes)} resultado(s) real(is) "

@@ -27,7 +27,16 @@ para a Copa do Mundo de 2026 — a primeira com 48 seleções.
 - **😴 Descanso:** ±2% por dia de diferença de descanso entre as equipes (máx. ±6%);
 - **💤 Jogo morto:** na 3ª rodada, time já garantido (6 pts) joga com ataque x0.85 e concede x1.10 — tanto nos palpites quanto dentro do Monte Carlo;
 - **🟨 Radar de cartões:** critério FIFA (2 amarelos = suspensão; zerados após as quartas). Suspensões cortam o ataque em até 20%, ponderado pela importância do jogador — editável direto no app;
-- **🏟️ Anfitrião e ⭐ craque:** bônus ajustáveis na sidebar.
+- **🏟️ Anfitrião, ⭐ craque e 🌎 continental:** bônus ajustáveis na sidebar (em 11 Copas nas Américas, só uma teve campeão europeu — CONMEBOL ganha bônus cheio, CONCACAF metade);
+- **⚔️ Matchup de estilos:** pedra-papel-tesoura tático — contra-ataque pune posse (+8%), bloco baixo neutraliza posse (-8%) e surpreende na transição (+5%);
+- **🦓 Variância de zebra:** acima de 300 pontos de gap de rating, o favorito perde 3% de λ e o azarão ganha 6% (o "dia mágico" existe);
+- **📈 Elo com K crescente:** recalibração com K=32/40/48 por rodada — vitória com tudo em jogo informa mais que na estreia.
+
+### Fatores exclusivos de mata-mata
+
+- **🥅 Pedigree de pênaltis (0–100):** empates no jogo único são decididos 50% pela razão dos λ e 50% pelo histórico de shootouts (Argentina 90, Croácia 88, Alemanha 85 vs Japão 52...);
+- **🎭 Síndrome de mata-mata:** fator de rendimento no jogo único (México 0.93 e a maldição das oitavas; Croácia 1.07);
+- **⏳ Imposto das 8 partidas:** elencos com idade média > 29 anos perdem 4% de λ das quartas em diante.
 
 ## Como executar
 
