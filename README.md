@@ -7,6 +7,7 @@ para a Copa do Mundo de 2026 — a primeira com 48 seleções.
 
 | Aba | Conteúdo |
 |---|---|
+| 🔴 Ao Vivo | Placar em tempo real dos jogos em andamento (scoreboard com cronômetro), encerrados do dia com acerto do modelo e próximos com palpite. Auto-refresh a cada 15s via `st.fragment` |
 | 📊 Panorama Histórico | Evolução do aproveitamento (2006–2022), gols marcados x sofridos e fase alcançada por edição (Plotly interativo) |
 | 🏃‍♂️ Desempenho de Atletas | Ranking de eficiência com barras de progresso e heatmap normalizado dos top 12 |
 | 🔮 Simulador e Previsões | Confronto A x B via **Distribuição de Poisson** (probabilidades, xG, placares prováveis, matriz de placares, head-to-head) + Power Ranking de título |
@@ -49,6 +50,23 @@ streamlit run app.py
 O app abre em `http://localhost:8501`.
 
 ## Acompanhando a Copa em tempo real
+
+### Placar ao vivo
+
+Durante uma partida, adicione o jogo ao dict `JOGOS_AO_VIVO` no `app.py`:
+
+```python
+JOGOS_AO_VIVO = {
+    ("Brasil", "Marrocos"): {"placar": "1x0", "minuto": "52'", "evento": "Gol de Vinícius Jr"},
+}
+```
+
+Ele aparece como scoreboard na aba **🔴 Ao Vivo** (atualiza a cada 15s). Quando
+o jogo acabar, mova o placar final para `resultado` no calendário e remova a
+entrada — o modelo recalibra sozinho. Para placar 100% automático, basta plugar
+uma API (football-data.org, api-football) na função `buscar_placares_ao_vivo()`.
+
+### Recalibração com resultados
 
 O calendário real da fase de grupos (72 jogos) está em `carregar_calendario()`
 no `app.py`. Conforme os jogos acontecem, preencha a coluna `resultado`

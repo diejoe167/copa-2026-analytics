@@ -71,6 +71,31 @@ CSS_CUSTOM = """
         border-left: 5px solid #FFC107;
         border-radius: 8px; padding: 18px 24px; line-height: 1.75;
     }
+    .scoreboard {
+        display: flex; align-items: center; justify-content: space-between;
+        background: linear-gradient(135deg, #0d2818 0%, #1B5E20 100%);
+        color: #fff; border-radius: 14px; padding: 16px 26px; margin: 10px 0;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+    }
+    .score-team { font-size: 1.15rem; font-weight: 700; flex: 1; }
+    .score-team.right { text-align: right; }
+    .score-num {
+        font-size: 2.3rem; font-weight: 800; color: #FFC107;
+        padding: 0 10px; white-space: nowrap;
+    }
+    .live-badge {
+        display: inline-block; background: #C62828; color: #fff;
+        font-size: 0.72rem; font-weight: 700; padding: 3px 9px;
+        border-radius: 6px; letter-spacing: 0.5px; vertical-align: middle;
+        animation: pulse 1.4s infinite;
+    }
+    .final-badge {
+        display: inline-block; background: #455A64; color: #fff;
+        font-size: 0.72rem; font-weight: 700; padding: 3px 9px;
+        border-radius: 6px; letter-spacing: 0.5px;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .minute { color: #FFE082; font-size: 0.9rem; font-weight: 600; }
 </style>
 """
 
@@ -349,8 +374,8 @@ def carregar_calendario() -> pd.DataFrame:
         # (data, rodada, grupo, time_a, time_b, resultado, sede)
         ("11/06", 1, "A", "México", "África do Sul", "2x0", "Cidade do México"),
         ("11/06", 1, "A", "Coreia do Sul", "Rep. Checa", "2x1", "Guadalajara"),
-        ("12/06", 1, "B", "Canadá", "Bósnia e Herzegovina", None, "Toronto"),
-        ("12/06", 1, "D", "Estados Unidos", "Paraguai", None, "Los Angeles"),
+        ("12/06", 1, "B", "Canadá", "Bósnia e Herzegovina", "1x1", "Toronto"),
+        ("12/06", 1, "D", "Estados Unidos", "Paraguai", "4x1", "Los Angeles"),
         ("13/06", 1, "B", "Catar", "Suíça", None, None),
         ("13/06", 1, "C", "Brasil", "Marrocos", None, "Nova York/NJ"),
         ("13/06", 1, "C", "Haiti", "Escócia", None, "Boston"),
@@ -399,7 +424,7 @@ def carregar_calendario() -> pd.DataFrame:
         ("24/06", 3, "A", "África do Sul", "Coreia do Sul", None, None),
         ("24/06", 3, "B", "Suíça", "Canadá", None, None),
         ("24/06", 3, "B", "Bósnia e Herzegovina", "Catar", None, None),
-        ("24/06", 3, "C", "Escócia", "Brasil", None, None),
+        ("24/06", 3, "C", "Escócia", "Brasil", None, "Miami"),
         ("24/06", 3, "C", "Marrocos", "Haiti", None, "Atlanta"),
         ("25/06", 3, "D", "Turquia", "Estados Unidos", None, None),
         ("25/06", 3, "D", "Paraguai", "Austrália", None, None),
@@ -424,6 +449,30 @@ def carregar_calendario() -> pd.DataFrame:
         jogos,
         columns=["data", "rodada", "grupo", "time_a", "time_b", "resultado", "sede"],
     )
+
+
+# ----------------------------------------------------------------------------
+# PLACAR AO VIVO
+# ----------------------------------------------------------------------------
+# Jogos EM ANDAMENTO. Atualize aqui durante as partidas, no formato:
+#   ("Time A", "Time B"): {"placar": "1x0", "minuto": "67'", "evento": "Gol de X"}
+# Quando o jogo terminar, mova o placar final para `resultado` em
+# carregar_calendario() e remova a entrada daqui — o modelo recalibra sozinho.
+JOGOS_AO_VIVO = {
+    # Exemplo (descomente e edite durante o jogo):
+    # ("Brasil", "Marrocos"): {"placar": "1x0", "minuto": "52'", "evento": "Gol de Vinícius Jr"},
+}
+
+
+def buscar_placares_ao_vivo() -> dict:
+    """Retorna os jogos em andamento e seus placares.
+
+    Hoje é alimentado manualmente por JOGOS_AO_VIVO. Para placar 100%
+    automático, basta plugar aqui uma API (football-data.org, api-football
+    etc.) que devolva o mesmo formato {(time_a, time_b): {placar, minuto}}.
+    O resto do app (scoreboard, probabilidades) não muda.
+    """
+    return dict(JOGOS_AO_VIVO)
 
 
 @st.cache_data
@@ -1296,6 +1345,121 @@ def render_sidebar(historico: pd.DataFrame) -> dict:
             "bonus_continental": bonus_continental}
 
 
+def _scoreboard_html(time_a: str, gols_a, gols_b, time_b: str,
+                     status_html: str) -> str:
+    """Monta o HTML de um placar estilo painel eletrônico."""
+    return (
+        '<div class="scoreboard">'
+        f'<div class="score-team">{time_a}</div>'
+        f'<div class="score-num">{gols_a}</div>'
+        f'<div style="text-align:center; min-width:96px;">{status_html}</div>'
+        f'<div class="score-num">{gols_b}</div>'
+        f'<div class="score-team right">{time_b}</div>'
+        '</div>'
+    )
+
+
+def _achar_jogo(calendario: pd.DataFrame, a: str, b: str):
+    """Localiza a linha do calendário de um confronto (em qualquer ordem)."""
+    m = calendario[((calendario["time_a"] == a) & (calendario["time_b"] == b))
+                   | ((calendario["time_a"] == b) & (calendario["time_b"] == a))]
+    return m.iloc[0] if not m.empty else None
+
+
+def render_ao_vivo(forcas: pd.DataFrame, calendario: pd.DataFrame,
+                   rho: float) -> None:
+    """Aba 🔴 Ao Vivo — placar em tempo real + encerrados e próximos de hoje."""
+    st.subheader("🔴 Ao Vivo — A Copa em tempo real")
+    hoje = date.today().strftime("%d/%m")
+    desfalques = desfalques_por_selecao(carregar_cartoes())
+
+    c1, c2 = st.columns([3, 1])
+    c1.caption(
+        f"Hoje é **{hoje}**. Jogos em andamento aparecem com placar e tempo; os "
+        "encerrados mostram se o modelo acertou; os próximos trazem o palpite. "
+        "Atualize `JOGOS_AO_VIVO` no código durante as partidas (ou pluge uma API)."
+    )
+    auto = c2.toggle("🔄 Auto (15s)", value=True, key="ao_vivo_auto",
+                     help="Recarrega o placar a cada 15 segundos.")
+
+    def _leitura_modelo(a: str, b: str) -> str:
+        jogo = _achar_jogo(calendario, a, b)
+        if jogo is None:
+            return ""
+        ma, mb, _ = fatores_contextuais(jogo, calendario, desfalques)
+        # garante a ordem (mandante/visitante) do calendário
+        if jogo["time_a"] == a:
+            prev = prever_jogo(forcas, a, b, rho, ma, mb)
+            va, vb = prev["vitoria_a"], prev["vitoria_b"]
+        else:
+            prev = prever_jogo(forcas, jogo["time_a"], jogo["time_b"], rho, ma, mb)
+            va, vb = prev["vitoria_b"], prev["vitoria_a"]
+        return (f"📊 Pré-jogo: {a} {va:.0f}% · empate {prev['empate']:.0f}% · "
+                f"{b} {vb:.0f}% — palpite: **{prev['palpite']}**")
+
+    @st.fragment(run_every="15s" if auto else None)
+    def _painel() -> None:
+        ao_vivo = buscar_placares_ao_vivo()
+
+        st.markdown("#### 🟢 Em andamento")
+        if not ao_vivo:
+            st.info("Nenhum jogo ao vivo neste momento. Confira os encerrados e os próximos de hoje abaixo. 👇")
+        else:
+            for (a, b), info in ao_vivo.items():
+                ga, gb = _parse_placar(info["placar"])
+                status = ('<span class="live-badge">● AO VIVO</span><br>'
+                          f'<span class="minute">{info.get("minuto", "")}</span>')
+                st.markdown(_scoreboard_html(a, ga, gb, b, status), unsafe_allow_html=True)
+                if info.get("evento"):
+                    st.caption(f"⚡ {info['evento']}")
+                leitura = _leitura_modelo(a, b)
+                if leitura:
+                    st.caption(leitura)
+
+        # --- encerrados hoje ---
+        encerrados = calendario[(calendario["data"] == hoje)
+                                & calendario["resultado"].notna()]
+        if not encerrados.empty:
+            st.markdown("#### ⏹️ Encerrados hoje")
+            for _, j in encerrados.iterrows():
+                ga, gb = _parse_placar(j["resultado"])
+                st.markdown(
+                    _scoreboard_html(j["time_a"], ga, gb, j["time_b"],
+                                     '<span class="final-badge">ENCERRADO</span>'),
+                    unsafe_allow_html=True)
+                real = (f"Vitória {j['time_a']}" if ga > gb
+                        else f"Vitória {j['time_b']}" if gb > ga else "Empate")
+                jogo = _achar_jogo(calendario, j["time_a"], j["time_b"])
+                ma, mb, _ = fatores_contextuais(jogo, calendario, desfalques)
+                prev = prever_jogo(forcas, j["time_a"], j["time_b"], rho, ma, mb)
+                acerto = "✅ modelo acertou" if real == prev["palpite"] else f"❌ modelo cravou {prev['palpite']}"
+                st.caption(f"{acerto} · {j['sede'] if pd.notna(j['sede']) else 'sede não def.'}")
+
+        # --- próximos hoje ---
+        ao_vivo_pares = set(ao_vivo) | {(b, a) for a, b in ao_vivo}
+        proximos = calendario[(calendario["data"] == hoje)
+                              & calendario["resultado"].isna()]
+        proximos = proximos[~proximos.apply(
+            lambda j: (j["time_a"], j["time_b"]) in ao_vivo_pares, axis=1)]
+        if not proximos.empty:
+            st.markdown("#### ⏰ Ainda hoje")
+            for _, j in proximos.iterrows():
+                sede = j["sede"] if pd.notna(j["sede"]) else "sede a confirmar"
+                st.markdown(f"**{j['time_a']} × {j['time_b']}** — Grupo {j['grupo']} · {sede}")
+                leitura = _leitura_modelo(j["time_a"], j["time_b"])
+                if leitura:
+                    st.caption(leitura)
+
+        if encerrados.empty and proximos.empty and not ao_vivo:
+            st.markdown("---")
+            st.markdown("**Sem jogos hoje neste calendário.** Próximas partidas:")
+            futuros = calendario[calendario["resultado"].isna()].head(4)
+            for _, j in futuros.iterrows():
+                st.markdown(f"- `{j['data']}` {j['time_a']} × {j['time_b']} (Grupo {j['grupo']})")
+
+    _painel()
+
+
 def render_tab_historico(historico: pd.DataFrame, filtros: dict) -> None:
     """Tab 1 — Panorama Histórico: evolução de aproveitamento e gols."""
     st.subheader("📊 Panorama Histórico — Últimas 5 Copas (2006–2022)")
@@ -2082,7 +2246,8 @@ def main() -> None:
             "da fase de grupos."
         )
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab_live, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "🔴 Ao Vivo",
         "📊 Panorama Histórico",
         "🏃‍♂️ Desempenho de Atletas",
         "🔮 Simulador e Previsões",
@@ -2090,6 +2255,8 @@ def main() -> None:
         "🏛️ Museu das Copas",
         "✍️ Crônica do Especialista",
     ])
+    with tab_live:
+        render_ao_vivo(forcas, calendario, filtros["rho"])
     with tab1:
         render_tab_historico(historico, filtros)
     with tab2:
