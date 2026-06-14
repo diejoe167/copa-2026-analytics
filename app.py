@@ -390,7 +390,7 @@ def carregar_calendario() -> pd.DataFrame:
         ("12/06", 1, "B", "Canadá", "Bósnia e Herzegovina", "1x1", "Toronto"),
         ("12/06", 1, "D", "Estados Unidos", "Paraguai", "4x1", "Los Angeles"),
         ("13/06", 1, "B", "Catar", "Suíça", None, None),
-        ("13/06", 1, "C", "Brasil", "Marrocos", None, "Nova York/NJ"),
+        ("13/06", 1, "C", "Brasil", "Marrocos", "1x1", "Nova York/NJ"),
         ("13/06", 1, "C", "Haiti", "Escócia", None, "Boston"),
         ("14/06", 1, "D", "Austrália", "Turquia", None, None),
         ("14/06", 1, "E", "Alemanha", "Curaçao", None, "Houston"),
@@ -666,6 +666,40 @@ def pontos_reais_grupo(calendario: pd.DataFrame, grupo: str) -> dict:
             pontos[j["time_a"]] += 1
             pontos[j["time_b"]] += 1
     return pontos
+
+
+def classificacao_grupos(calendario: pd.DataFrame) -> dict:
+    """Classificação ao vivo de cada grupo, só com resultados REAIS já disputados.
+
+    Retorna {grupo: DataFrame ordenado por P, SG, GP} com Pos, P, J, V, E, D,
+    GP, GC, SG. Critério FIFA de desempate (pontos → saldo → gols pró).
+    """
+    out = {}
+    for g in sorted(calendario["grupo"].unique()):
+        jogos_g = calendario[calendario["grupo"] == g]
+        times = sorted(set(jogos_g["time_a"]) | set(jogos_g["time_b"]))
+        stats = {t: {"P": 0, "J": 0, "V": 0, "E": 0, "D": 0, "GP": 0, "GC": 0}
+                 for t in times}
+        for _, j in jogos_g[jogos_g["resultado"].notna()].iterrows():
+            ga, gb = _parse_placar(j["resultado"])
+            a, b = j["time_a"], j["time_b"]
+            stats[a]["J"] += 1; stats[b]["J"] += 1
+            stats[a]["GP"] += ga; stats[a]["GC"] += gb
+            stats[b]["GP"] += gb; stats[b]["GC"] += ga
+            if ga > gb:
+                stats[a]["P"] += 3; stats[a]["V"] += 1; stats[b]["D"] += 1
+            elif gb > ga:
+                stats[b]["P"] += 3; stats[b]["V"] += 1; stats[a]["D"] += 1
+            else:
+                stats[a]["P"] += 1; stats[b]["P"] += 1
+                stats[a]["E"] += 1; stats[b]["E"] += 1
+        df = pd.DataFrame(
+            [{"Seleção": t, **stats[t], "SG": stats[t]["GP"] - stats[t]["GC"]}
+             for t in times]
+        ).sort_values(["P", "SG", "GP"], ascending=False).reset_index(drop=True)
+        df.insert(0, "Pos", df.index + 1)
+        out[g] = df
+    return out
 
 
 def desfalques_por_selecao(cartoes: pd.DataFrame) -> dict:
@@ -1379,6 +1413,17 @@ def _achar_jogo(calendario: pd.DataFrame, a: str, b: str):
     return m.iloc[0] if not m.empty else None
 
 
+def _estilo_classificacao(row) -> list:
+    """Pinta a zona de classificação: verde = top 2, amarelo = 3º (repescagem)."""
+    if row["Pos"] <= 2:
+        cor = "background-color: rgba(46,125,50,0.20)"
+    elif row["Pos"] == 3:
+        cor = "background-color: rgba(255,193,7,0.16)"
+    else:
+        cor = ""
+    return [cor] * len(row)
+
+
 def render_ao_vivo(forcas: pd.DataFrame, calendario: pd.DataFrame,
                    rho: float) -> None:
     """Aba 🔴 Ao Vivo — placar em tempo real + encerrados e próximos de hoje."""
@@ -1471,6 +1516,32 @@ def render_ao_vivo(forcas: pd.DataFrame, calendario: pd.DataFrame,
                 st.markdown(f"- `{j['data']}` {j['time_a']} × {j['time_b']} (Grupo {j['grupo']})")
 
     _painel()
+
+    st.divider()
+    st.markdown("#### 📊 Classificação dos grupos (ao vivo)")
+    st.caption(
+        "Calculada **só com resultados reais já disputados**. Avançam os 2 "
+        "primeiros de cada grupo + os 8 melhores 3os. 🟩 zona de classificação "
+        "direta · 🟨 melhor-3º (repescagem). Estes números alimentam o modelo: "
+        "cada resultado recalibra as forças e o 'jogo morto' da 3ª rodada."
+    )
+    tabelas = classificacao_grupos(calendario)
+    comecaram = {g: t for g, t in tabelas.items() if int(t["J"].sum()) > 0}
+    if not comecaram:
+        st.info("Nenhum grupo começou ainda.")
+    else:
+        cols = st.columns(3)
+        for i, (g, tab) in enumerate(comecaram.items()):
+            with cols[i % 3]:
+                st.markdown(f"**Grupo {g}**")
+                vista = tab[["Pos", "Seleção", "P", "J", "SG"]]
+                st.dataframe(
+                    vista.style.apply(_estilo_classificacao, axis=1),
+                    hide_index=True, use_container_width=True,
+                )
+        pendentes = [g for g in tabelas if g not in comecaram]
+        if pendentes:
+            st.caption("Ainda não começaram: " + ", ".join(f"**{g}**" for g in pendentes))
 
 
 def render_tab_historico(historico: pd.DataFrame, filtros: dict) -> None:
