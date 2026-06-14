@@ -35,6 +35,8 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from dados_copas import carregar_museu, titulos_por_selecao
+from api_futebol import (api_disponivel, artilheiros_api, placares_ao_vivo_api,
+                         resultados_finalizados_api)
 
 # ============================================================================
 # CONFIGURAÇÃO GERAL E ESTILO
@@ -478,14 +480,35 @@ JOGOS_AO_VIVO = {
 
 
 def buscar_placares_ao_vivo() -> dict:
-    """Retorna os jogos em andamento e seus placares.
-
-    Hoje é alimentado manualmente por JOGOS_AO_VIVO. Para placar 100%
-    automático, basta plugar aqui uma API (football-data.org, api-football
-    etc.) que devolva o mesmo formato {(time_a, time_b): {placar, minuto}}.
-    O resto do app (scoreboard, probabilidades) não muda.
-    """
+    """Jogos em andamento. Tenta a API real; cai no manual (JOGOS_AO_VIVO)."""
+    if api_disponivel():
+        vivos = placares_ao_vivo_api()
+        if vivos:
+            return vivos
     return dict(JOGOS_AO_VIVO)
+
+
+def aplicar_resultados_api(calendario: pd.DataFrame) -> pd.DataFrame:
+    """Sobrepõe ao calendário os resultados finalizados vindos da API.
+
+    Preenche/atualiza `resultado` casando pelo par de seleções (em qualquer
+    ordem). Sem API, devolve o calendário intacto. Resultados manuais que a
+    API ainda não tenha são preservados.
+    """
+    if not api_disponivel():
+        return calendario
+    finalizados = resultados_finalizados_api()
+    if not finalizados:
+        return calendario
+    cal = calendario.copy()
+    for idx, j in cal.iterrows():
+        chave = finalizados.get((j["time_a"], j["time_b"]))
+        if chave is None and (j["time_b"], j["time_a"]) in finalizados:
+            gb, ga = _parse_placar(finalizados[(j["time_b"], j["time_a"])])
+            chave = f"{ga}x{gb}"
+        if chave is not None:
+            cal.at[idx, "resultado"] = chave
+    return cal
 
 
 @st.cache_data
@@ -1431,11 +1454,18 @@ def render_ao_vivo(forcas: pd.DataFrame, calendario: pd.DataFrame,
     hoje = data_hoje_br()
     desfalques = desfalques_por_selecao(carregar_cartoes())
 
+    if api_disponivel():
+        st.success("🟢 **API conectada** (football-data.org) — placares e "
+                   "resultados atualizam automaticamente.")
+    else:
+        st.info("⚪ **Modo manual** — placares vêm do calendário e de "
+                "`JOGOS_AO_VIVO`. Configure `FOOTBALL_DATA_TOKEN` nos secrets "
+                "para atualização automática (veja o README).")
+
     c1, c2 = st.columns([3, 1])
     c1.caption(
         f"Hoje é **{hoje}**. Jogos em andamento aparecem com placar e tempo; os "
-        "encerrados mostram se o modelo acertou; os próximos trazem o palpite. "
-        "Atualize `JOGOS_AO_VIVO` no código durante as partidas (ou pluge uma API)."
+        "encerrados mostram se o modelo acertou; os próximos trazem o palpite."
     )
     auto = c2.toggle("🔄 Auto (15s)", value=True, key="ao_vivo_auto",
                      help="Recarrega o placar a cada 15 segundos.")
@@ -1542,6 +1572,25 @@ def render_ao_vivo(forcas: pd.DataFrame, calendario: pd.DataFrame,
         pendentes = [g for g in tabelas if g not in comecaram]
         if pendentes:
             st.caption("Ainda não começaram: " + ", ".join(f"**{g}**" for g in pendentes))
+
+    if api_disponivel():
+        st.divider()
+        st.markdown("#### 👟 Artilharia da Copa (dados reais da API)")
+        artilheiros = artilheiros_api(15)
+        if artilheiros.empty:
+            st.caption("Ainda sem gols registrados pela API nesta edição.")
+        else:
+            st.dataframe(
+                artilheiros, hide_index=True, use_container_width=True,
+                column_config={
+                    "jogador": "Jogador", "selecao": "Seleção",
+                    "gols": st.column_config.NumberColumn("⚽ Gols"),
+                    "assistencias": st.column_config.NumberColumn("🎯 Assist."),
+                    "jogos": st.column_config.NumberColumn("Jogos"),
+                },
+            )
+            st.caption("Desempenho individual real do torneio — fonte: "
+                       "football-data.org. Atualiza a cada 5 min.")
 
 
 def render_tab_historico(historico: pd.DataFrame, filtros: dict) -> None:
@@ -2316,7 +2365,7 @@ def main() -> None:
     historico = carregar_historico_copas()
     jogadores = carregar_jogadores()
     h2h = carregar_head_to_head()
-    calendario = carregar_calendario()
+    calendario = aplicar_resultados_api(carregar_calendario())
 
     filtros = render_sidebar(historico)
     # Recalibra com resultados reais e aplica fatores contextuais (sidebar)

@@ -51,7 +51,26 @@ O app abre em `http://localhost:8501`.
 
 ## Acompanhando a Copa em tempo real
 
-### Placar ao vivo
+### Placar ao vivo automático (API)
+
+O app integra a **football-data.org** (plano gratuito) para placares ao vivo,
+resultados finalizados e artilharia reais. É **opcional** — sem chave, o app
+funciona no modo manual (abaixo).
+
+1. Crie uma conta grátis em https://www.football-data.org/client/register
+2. Copie seu token.
+3. **No Streamlit Cloud:** App → Settings → **Secrets**, adicione:
+   ```toml
+   FOOTBALL_DATA_TOKEN = "seu_token_aqui"
+   ```
+   **Localmente:** crie `.streamlit/secrets.toml` com a mesma linha (esse
+   arquivo é ignorado pelo git — nunca suba seu token).
+
+Com a chave ativa, a aba **🔴 Ao Vivo** mostra "🟢 API conectada": jogos em
+andamento, resultados encerrados e a artilharia da Copa entram sozinhos, e o
+modelo recalibra automaticamente.
+
+### Placar ao vivo manual (sem chave)
 
 Durante uma partida, adicione o jogo ao dict `JOGOS_AO_VIVO` no `app.py`:
 
