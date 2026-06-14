@@ -13,7 +13,20 @@ Stack: streamlit, pandas, numpy, plotly
 
 import functools
 import math
-from datetime import date
+from datetime import datetime, timezone, timedelta
+
+# Horário de Brasília (UTC−3, sem horário de verão desde 2019). Usamos um
+# offset fixo em vez de zoneinfo para não depender do pacote tzdata no Windows.
+FUSO_BRASIL = timezone(timedelta(hours=-3))
+
+
+def data_hoje_br() -> str:
+    """Data de hoje (dd/mm) no horário de Brasília.
+
+    O Streamlit Cloud roda em UTC; sem isto, jogos da noite brasileira fariam
+    o app "virar o dia" e mostrar os jogos da data seguinte como se fossem hoje.
+    """
+    return datetime.now(FUSO_BRASIL).strftime("%d/%m")
 
 import numpy as np
 import pandas as pd
@@ -1370,7 +1383,7 @@ def render_ao_vivo(forcas: pd.DataFrame, calendario: pd.DataFrame,
                    rho: float) -> None:
     """Aba 🔴 Ao Vivo — placar em tempo real + encerrados e próximos de hoje."""
     st.subheader("🔴 Ao Vivo — A Copa em tempo real")
-    hoje = date.today().strftime("%d/%m")
+    hoje = data_hoje_br()
     desfalques = desfalques_por_selecao(carregar_cartoes())
 
     c1, c2 = st.columns([3, 1])
@@ -1692,7 +1705,7 @@ def render_palpites_calendario(forcas: pd.DataFrame, calendario: pd.DataFrame,
     st.markdown("#### 📅 Palpites do calendário real (fase de grupos)")
 
     datas = list(calendario["data"].unique())
-    hoje = date.today().strftime("%d/%m")
+    hoje = data_hoje_br()
     indice_padrao = datas.index(hoje) if hoje in datas else 0
     col_d, col_info = st.columns([2, 3])
     data_sel = col_d.selectbox("Escolha o dia", datas, index=indice_padrao,
